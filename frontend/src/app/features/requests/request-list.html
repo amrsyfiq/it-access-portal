@@ -1,0 +1,87 @@
+<div class="page-header">
+  <div class="title">
+    <h1>{{ query().status === 'PENDING' ? 'Review queue' : 'Access requests' }}</h1>
+  </div>
+  <a class="btn btn-primary" routerLink="/catalog">+ Request access</a>
+</div>
+
+<div class="filters card">
+  <label class="filter">
+    <span>Status</span>
+    <select (change)="onStatusChange($event)">
+      <option value="" [selected]="!query().status">All statuses</option>
+      @for (s of statuses; track s) {
+        <option [value]="s" [selected]="s === query().status">{{ s }}</option>
+      }
+    </select>
+  </label>
+  <form class="filter search" (submit)="onSearch($event, searchInput)" role="search">
+    <label for="list-search">Search</label>
+    <div class="search-row">
+      <input
+        #searchInput
+        id="list-search"
+        type="search"
+        placeholder="Requester or system"
+        [value]="query().q"
+      />
+      <button class="btn" type="submit">Search</button>
+    </div>
+  </form>
+</div>
+
+@let s = state();
+@if (s.kind === 'loading') {
+  <div class="state" aria-live="polite"><span class="spinner"></span> Loading requests…</div>
+} @else if (s.kind === 'error') {
+  <div class="alert alert-error" role="alert">
+    {{ s.error.message }}
+    <button class="btn retry" type="button" (click)="retry()">Try again</button>
+  </div>
+} @else {
+  @if (s.page.items.length === 0) {
+    <div class="state card empty">
+      <p><strong>No requests found.</strong></p>
+      <p>
+        @if (query().status || query().q) {
+          Try clearing the filters.
+        } @else {
+          Nothing has been requested yet.
+        }
+      </p>
+      <a class="btn btn-primary" routerLink="/catalog">Request access</a>
+    </div>
+  } @else {
+    <div class="card table-card">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">ID</th>
+            <th scope="col">Requester</th>
+            <th scope="col">System</th>
+            <th scope="col">Access</th>
+            <th scope="col">Status</th>
+            <th scope="col">Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of s.page.items; track r.id) {
+            <tr>
+              <td data-label="ID"><a [routerLink]="['/requests', r.id]">#{{ r.id }}</a></td>
+              <td data-label="Requester">{{ r.requesterName }}</td>
+              <td data-label="System">{{ r.systemName }}</td>
+              <td data-label="Access">{{ r.accessLevel }}</td>
+              <td data-label="Status"><app-status-badge [status]="r.status" /></td>
+              <td data-label="Created">{{ r.createdAt | date: 'medium' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <span class="muted">{{ s.page.totalItems }} request(s) · page {{ s.page.page + 1 }} of {{ totalPages(s.page) }}</span>
+      <button class="btn" type="button" [disabled]="s.page.page === 0" (click)="goToPage(s.page.page - 1)">Previous</button>
+      <button class="btn" type="button" [disabled]="s.page.page + 1 >= totalPages(s.page)" (click)="goToPage(s.page.page + 1)">Next</button>
+    </div>
+  }
+}

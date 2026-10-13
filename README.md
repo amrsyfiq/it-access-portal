@@ -4,7 +4,7 @@ Employees request access to internal systems (GitLab, Jira, AWS, ...). Administr
 
 Learning and portfolio project. Stack: Spring Boot 4.1 · MyBatis 3 · HikariCP · Oracle Database Free 23ai · Flyway · RabbitMQ *(Phase 3)* · Angular 22 *(Phase 2)* · WSO2 API Manager *(Phase 4)*.
 
-> Status: **backend (Phase 1) working and tested against Oracle.** Frontend, messaging and gateway are not built yet. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+> Status: **backend (Phase 1) and Angular UI (Phase 2) working and tested against Oracle.** Messaging (RabbitMQ) and the WSO2 gateway are not built yet. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and the [demo script](docs/demo-script.md).
 
 ## Prerequisites
 
@@ -34,12 +34,35 @@ curl http://localhost:8080/api/health     # {"status":"UP","database":"UP"}
 
 Then try the requests in [docs/api-examples.http](docs/api-examples.http).
 
-Stop with `Ctrl+C` (backend) and `docker compose stop` (Oracle). `docker compose down -v` also **deletes the database volume**.
+```bash
+# 5. Start the Angular UI (second terminal)
+cd frontend
+npm install                     # first time only
+npm start                       # http://localhost:4200
+```
+
+`ng serve` proxies `/api/*` to `http://localhost:8080` ([proxy.conf.json](frontend/proxy.conf.json)), so the browser talks to a single origin and the backend needs no CORS configuration. The API base URL is set in [environment.ts](frontend/src/environments/environment.ts).
+
+Stop with `Ctrl+C` (backend and UI) and `docker compose stop` (Oracle). `docker compose down -v` also **deletes the database volume**.
+
+## Frontend
+
+| Page | Route | What it shows |
+|---|---|---|
+| Request access | `/catalog` | Searchable grid of systems; clicking one opens the form |
+| New request | `/requests/new?system=Jira` | Reactive form with client-side and server-side validation errors |
+| All requests / Review queue | `/requests`, `/requests?status=PENDING` | Table with status filter and search; filters live in the URL |
+| Request details | `/requests/:id` | Details and history timeline; **Approve / Reject** only for admins on PENDING requests |
+
+Structure: `core/` (typed DTOs, `AccessRequestApi`, the only class that makes HTTP calls; error mapping; demo user and interceptor), `features/requests/` (pages), `shared/` (status badge). Plain CSS with custom properties; no UI framework.
+
+The system catalog is a fixed list in [system-catalog.ts](frontend/src/app/core/system-catalog.ts). It is a list of choices, not mock API data.
 
 ## Tests
 
 ```bash
 cd backend && ./mvnw test        # JUnit: unit, web-layer, Oracle integration
+cd frontend && npx ng test --watch=false   # Vitest: components against a mocked HTTP backend
 ```
 
 - Unit and web-layer tests need nothing else.
@@ -84,4 +107,6 @@ Pool metrics (dev profile): `GET /actuator/metrics/hikaricp.connections.active`.
 | `SQLTransientConnectionException: AccessPortalPool - Connection is not available` | Pool exhausted or DB down. Check `/actuator/metrics/hikaricp.connections.pending` |
 | `Invalid column type: 1111` | A null parameter without a jdbcType. Keep `mybatis.configuration.jdbc-type-for-null=NULL` |
 | Tests skipped | Docker Desktop isn't running |
+| UI shows "Cannot reach the server" | Backend not running on :8080, or the UI was opened some other way than `npm start` (the proxy only exists in `ng serve`) |
+| UI shows HTTP 504 from the proxy | Backend still starting, or it crashed; check its terminal |
 | `java -version` shows 1.8 | Open a new terminal after installing JDK 21, or set `JAVA_HOME` to the JDK 21 folder |

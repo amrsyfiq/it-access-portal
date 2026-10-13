@@ -1,0 +1,37 @@
+<div class="page-header">
+  <div class="title">
+    <a class="back-link" routerLink="/requests" aria-label="Back to requests">←</a>
+    <h1>Request access</h1>
+  </div>
+</div>
+
+<label class="visually-hidden" for="catalog-search">Search systems</label>
+<input
+  id="catalog-search"
+  class="search"
+  type="search"
+  placeholder="Search systems"
+  [value]="search()"
+  (input)="onSearch($event)"
+/>
+
+<div class="grid">
+  @for (system of systems(); track system.name) {
+    <a class="tile card" routerLink="/requests/new" [queryParams]="{ system: system.name }">
+      <span class="logo" [style.background]="system.color" aria-hidden="true">{{ system.monogram }}</span>
+      <span class="category">{{ system.category }}</span>
+      <span class="name">{{ system.name }}</span>
+      <span class="description">{{ system.description }}</span>
+    </a>
+  }
+  <a class="tile card other" routerLink="/requests/new">
+    <span class="logo logo-other" aria-hidden="true">+</span>
+    <span class="category">OTHER</span>
+    <span class="name">Another system</span>
+    <span class="description">Not listed? Enter the system name yourself.</span>
+  </a>
+</div>
+
+@if (systems().length === 0) {
+  <p class="muted">No systems match “{{ search() }}”. You can still use “Another system”.</p>
+}
