@@ -1,0 +1,61 @@
+<div class="page-header">
+  <div class="title">
+    <a class="back-link" routerLink="/catalog" aria-label="Back to catalog">←</a>
+    <h1>New access request</h1>
+  </div>
+</div>
+
+<form class="card form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+  @if (error(); as err) {
+    <div class="alert alert-error" role="alert">{{ err.message }}</div>
+  }
+
+  <div class="field" [class.invalid]="fieldError('requesterName')">
+    <label for="requesterName">Requester name</label>
+    <input id="requesterName" formControlName="requesterName" autocomplete="name" />
+    @if (fieldError('requesterName'); as msg) {
+      <p class="error-text">{{ msg }}</p>
+    }
+  </div>
+
+  <div class="field" [class.invalid]="fieldError('systemName')">
+    <label for="systemName">System</label>
+    <input id="systemName" formControlName="systemName" placeholder="e.g. GitLab" />
+    @if (fieldError('systemName'); as msg) {
+      <p class="error-text">{{ msg }}</p>
+    }
+  </div>
+
+  <div class="field" [class.invalid]="fieldError('accessLevel')">
+    <label for="accessLevel">Access level</label>
+    <select id="accessLevel" formControlName="accessLevel">
+      <option value="" disabled>Select a level…</option>
+      @for (level of accessLevels; track level) {
+        <option [value]="level">{{ level }}</option>
+      }
+    </select>
+    @if (fieldError('accessLevel'); as msg) {
+      <p class="error-text">{{ msg }}</p>
+    }
+  </div>
+
+  <div class="field" [class.invalid]="fieldError('reason')">
+    <label for="reason">Business justification</label>
+    <textarea id="reason" formControlName="reason" rows="4"></textarea>
+    <span class="hint">{{ form.controls.reason.value.length }}/1000 · at least 10 characters</span>
+    @if (fieldError('reason'); as msg) {
+      <p class="error-text">{{ msg }}</p>
+    }
+  </div>
+
+  <div class="actions">
+    <a class="btn" routerLink="/catalog">Cancel</a>
+    <button class="btn btn-primary" type="submit" [disabled]="submitting()">
+      @if (submitting()) {
+        <span class="spinner" aria-hidden="true"></span> Submitting…
+      } @else {
+        Submit request
+      }
+    </button>
+  </div>
+</form>

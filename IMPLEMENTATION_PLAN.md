@@ -1,6 +1,6 @@
 # Implementation Plan — IT Access Request Portal
 
-Status: **Phase 1 complete (verified against Oracle 23ai). Next: Phase 2 — Angular frontend.**
+Status: **Phases 1–2 complete (verified against Oracle 23ai and in a real browser). Next: Phase 3 — RabbitMQ.**
 Last updated: 2026-10-13
 
 Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static frontend system catalog, package `com.itaccess.portal`.
@@ -18,6 +18,11 @@ Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static fr
 | 2026-10-13 | Manual smoke test vs compose Oracle: Flyway applied V1 to schema `PORTAL`; health 200, create 201 + Location, validation 400, employee review 403, approve 200 (history 2 rows), second review 409, list filter 200, unknown id 404, Hikari metrics visible | ✅ |
 | 2026-10-13 | Bug found in smoke test: the POST response had nanosecond timestamps, but Oracle stores microseconds, so a later GET returned a different value. Service now truncates to micros; unit test added | ✅ fixed |
 | 2026-10-13 | Final `mvnw test`: **29 run, 0 failures, 0 skipped** | ✅ Phase 1 exit criteria met |
+| 2026-10-13 | Phase 2: Angular 22.2 app generated (`npx @angular/cli@22 new`, zoneless, standalone, Vitest); dev proxy `/api` → :8080 | ✅ |
+| 2026-10-13 | Pages: catalog (screenshot-inspired card grid), form, list (filters in URL), detail + history, admin review panel; demo-user switcher + interceptor | ✅ `ng build` clean, no warnings |
+| 2026-10-13 | `ng test`: 20 tests pass (form validation + server errors, list render/empty/error/retry, review visibility by role/status, approve flow, 409 reload, app shell). Mutation check: breaking the `canReview` rule makes 4 tests fail | ✅ |
+| 2026-10-13 | Browser walkthrough (headless Edge via Playwright, against the real backend + Oracle): submit → PENDING → switch to admin → approve → APPROVED survives reload; review queue empty state; 390 px layout has no horizontal scroll; no console errors | ✅ Phase 2 exit criteria met |
+| 2026-10-13 | Bug found in the browser (not reproducible in jsdom): `<select [value]>` showed the wrong option on page load (demo user + status filter). Fixed with `[selected]` per option; verified in Edge before and after | ✅ fixed |
 
 ---
 

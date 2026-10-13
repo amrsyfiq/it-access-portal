@@ -1,0 +1,39 @@
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" routerLink="/requests">IT<span>ACCESS</span></a>
+    <nav aria-label="Main">
+      <a routerLink="/catalog" routerLinkActive="active">Request access</a>
+      <a
+        routerLink="/requests"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+        >All requests</a
+      >
+      @if (demoUser.isAdmin()) {
+        <a routerLink="/requests" [queryParams]="{ status: 'PENDING' }">Review queue</a>
+      }
+    </nav>
+    <p class="sidebar-foot">Learning project · not production</p>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <label class="user-switch">
+        <span class="user-switch-label">Demo user <small>(dev only)</small></span>
+        <!-- [selected] per option, not [value] on the select: the options are rendered by @for
+             after the select's value would be applied, so a restored user would not be shown. -->
+        <select (change)="onUserChange($event)">
+          @for (u of users; track u.username) {
+            <option [value]="u.username" [selected]="u.username === demoUser.current().username">
+              {{ u.displayName }} · {{ u.role }}
+            </option>
+          }
+        </select>
+      </label>
+    </header>
+
+    <main class="content">
+      <router-outlet />
+    </main>
+  </div>
+</div>

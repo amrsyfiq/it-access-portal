@@ -1,0 +1,90 @@
+@let s = state();
+
+<div class="page-header">
+  <div class="title">
+    <a class="back-link" routerLink="/requests" aria-label="Back to requests">←</a>
+    <h1>
+      Access request
+      @if (s.kind === 'loaded') {
+        #{{ s.request.id }}
+      }
+    </h1>
+  </div>
+</div>
+
+@if (flash(); as message) {
+  <div class="alert alert-success" role="status">{{ message }}</div>
+}
+
+@if (s.kind === 'loading') {
+  <div class="state" aria-live="polite"><span class="spinner"></span> Loading request…</div>
+} @else if (s.kind === 'error') {
+  <div class="alert alert-error" role="alert">
+    {{ s.error.message }}
+    @if (s.error.status !== 404) {
+      <button class="btn retry" type="button" (click)="reload()">Try again</button>
+    }
+  </div>
+  <a routerLink="/requests">Back to all requests</a>
+} @else {
+  @let r = s.request;
+  <div class="layout">
+    <div>
+      <section class="card">
+        <div class="summary">
+          <div>
+            <p class="system">{{ r.systemName }}</p>
+            <p class="muted">{{ r.accessLevel }} access for {{ r.requesterName }}</p>
+          </div>
+          <app-status-badge [status]="r.status" />
+        </div>
+        <dl>
+          <dt>Requester</dt>
+          <dd>{{ r.requesterName }}</dd>
+          <dt>System</dt>
+          <dd>{{ r.systemName }}</dd>
+          <dt>Access level</dt>
+          <dd>{{ r.accessLevel }}</dd>
+          <dt>Reason</dt>
+          <dd class="reason">{{ r.reason }}</dd>
+          <dt>Created</dt>
+          <dd>{{ r.createdAt | date: 'medium' }}</dd>
+          <dt>Last updated</dt>
+          <dd>{{ r.updatedAt | date: 'medium' }}</dd>
+        </dl>
+      </section>
+
+      @if (canReview()) {
+        <app-review-panel [requestId]="r.id" (reviewed)="onReviewed($event)" (conflict)="reload()" />
+      } @else if (r.status === 'PENDING') {
+        <p class="alert alert-info awaiting">Waiting for an administrator to review this request.</p>
+      }
+    </div>
+
+    <section class="card history" aria-labelledby="history-heading">
+      <h2 id="history-heading">History</h2>
+      <ol class="timeline">
+        @for (h of r.history; track h.id) {
+          <li>
+            <div class="entry-head">
+              <app-status-badge [status]="h.newStatus" />
+              <time class="muted">{{ h.changedAt | date: 'medium' }}</time>
+            </div>
+            <p class="entry-text">
+              @if (h.oldStatus) {
+                {{ h.oldStatus }} → {{ h.newStatus }} by <strong>{{ h.changedBy }}</strong>
+              } @else {
+                Submitted by <strong>{{ h.changedBy }}</strong>
+              }
+            </p>
+            @if (h.comment) {
+              <blockquote>“{{ h.comment }}”</blockquote>
+            }
+          </li>
+        } @empty {
+          <li class="muted">No history recorded.</li>
+        }
+      </ol>
+    </section>
+  </div>
+}
