@@ -7,6 +7,7 @@ import {
   AccessRequestDetail,
   CreateAccessRequestPayload,
   HistoryEntry,
+  NotificationLogEntry,
   Page,
   RequestListQuery,
   ReviewPayload,
@@ -36,6 +37,10 @@ export class AccessRequestApi {
 
   history(id: number): Observable<HistoryEntry[]> {
     return this.http.get<HistoryEntry[]>(`${this.baseUrl}/${id}/history`);
+  }
+
+  notifications(id: number): Observable<NotificationLogEntry[]> {
+    return this.http.get<NotificationLogEntry[]>(`${this.baseUrl}/${id}/notifications`);
   }
 
   create(payload: CreateAccessRequestPayload): Observable<AccessRequest> {

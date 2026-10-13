@@ -14,6 +14,7 @@ import com.itaccess.portal.exception.InvalidStatusTransitionException;
 import com.itaccess.portal.exception.NotFoundException;
 import com.itaccess.portal.mapper.AccessRequestMapper;
 import com.itaccess.portal.mapper.RequestHistoryMapper;
+import com.itaccess.portal.messaging.event.AccessRequestEvent;
 import com.itaccess.portal.security.CurrentUser;
 import com.itaccess.portal.security.Role;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.context.ApplicationEventPublisher;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Clock;
@@ -54,12 +56,14 @@ class AccessRequestServiceTest {
     private AccessRequestMapper requestMapper;
     @Mock
     private RequestHistoryMapper historyMapper;
+    @Mock
+    private ApplicationEventPublisher events;
 
     private AccessRequestService service;
 
     @BeforeEach
     void setUp() {
-        service = new AccessRequestService(requestMapper, historyMapper, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new AccessRequestService(requestMapper, historyMapper, events, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -83,12 +87,23 @@ class AccessRequestServiceTest {
         assertThat(history.getValue().getOldStatus()).isNull();
         assertThat(history.getValue().getNewStatus()).isEqualTo(RequestStatus.PENDING);
         assertThat(history.getValue().getChangedBy()).isEqualTo("ted.l");
+
+        ArgumentCaptor<AccessRequestEvent> event = ArgumentCaptor.forClass(AccessRequestEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().eventType()).isEqualTo(AccessRequestEvent.SUBMITTED);
+        assertThat(event.getValue().requestId()).isEqualTo(42L);
+        assertThat(event.getValue().routingKey()).isEqualTo("access-request.submitted");
+        assertThat(event.getValue().eventId()).isNotNull();
     }
 
     @Test
     void timestampsAreTruncatedToOracleMicrosecondPrecision() {
         Clock nanoClock = Clock.fixed(Instant.parse("2026-10-13T08:00:00.123456789Z"), ZoneOffset.UTC);
-        service = new AccessRequestService(requestMapper, historyMapper, nanoClock);
+        service = new AccessRequestService(requestMapper, historyMapper, events, nanoClock);
+        doAnswer(inv -> {
+            inv.<AccessRequest>getArgument(0).setId(1L);
+            return 1;
+        }).when(requestMapper).insert(any());
 
         AccessRequestResponse result = service.create(
                 new CreateAccessRequest("Ted L", "GitLab", AccessLevel.READ, "Need to read the code"), EMPLOYEE);
@@ -110,6 +125,13 @@ class AccessRequestServiceTest {
         assertThat(history.getValue().getNewStatus()).isEqualTo(RequestStatus.APPROVED);
         assertThat(history.getValue().getReviewComment()).isEqualTo("Looks fine");
         assertThat(history.getValue().getChangedBy()).isEqualTo("alice.admin");
+
+        ArgumentCaptor<AccessRequestEvent> event = ArgumentCaptor.forClass(AccessRequestEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue().eventType()).isEqualTo(AccessRequestEvent.REVIEWED);
+        assertThat(event.getValue().status()).isEqualTo(RequestStatus.APPROVED);
+        assertThat(event.getValue().actor()).isEqualTo("alice.admin");
+        assertThat(event.getValue().systemName()).isEqualTo("GitLab");
     }
 
     @Test
@@ -134,6 +156,7 @@ class AccessRequestServiceTest {
                 .isInstanceOf(InvalidStatusTransitionException.class)
                 .hasMessageContaining("APPROVED");
         verify(historyMapper, never()).insert(any());
+        verifyNoInteractions(events);
     }
 
     @Test
@@ -144,6 +167,7 @@ class AccessRequestServiceTest {
         assertThatThrownBy(() -> service.review(99L, new ReviewRequest(ReviewDecision.APPROVED, null), ADMIN))
                 .isInstanceOf(NotFoundException.class);
         verify(historyMapper, never()).insert(any());
+        verifyNoInteractions(events);
     }
 
     @Test

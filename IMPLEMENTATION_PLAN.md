@@ -1,6 +1,6 @@
 # Implementation Plan — IT Access Request Portal
 
-Status: **Phases 1–2 complete (verified against Oracle 23ai and in a real browser). Next: Phase 3 — RabbitMQ.**
+Status: **Phases 1–3 complete (verified against Oracle 23ai, RabbitMQ 4 and in a real browser). Next: Phase 4 — WSO2 API Manager.**
 Last updated: 2026-10-13
 
 Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static frontend system catalog, package `com.itaccess.portal`.
@@ -23,6 +23,14 @@ Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static fr
 | 2026-10-13 | `ng test`: 20 tests pass (form validation + server errors, list render/empty/error/retry, review visibility by role/status, approve flow, 409 reload, app shell). Mutation check: breaking the `canReview` rule makes 4 tests fail | ✅ |
 | 2026-10-13 | Browser walkthrough (headless Edge via Playwright, against the real backend + Oracle): submit → PENDING → switch to admin → approve → APPROVED survives reload; review queue empty state; 390 px layout has no horizontal scroll; no console errors | ✅ Phase 2 exit criteria met |
 | 2026-10-13 | Bug found in the browser (not reproducible in jsdom): `<select [value]>` showed the wrong option on page load (demo user + status filter). Fixed with `[selected]` per option; verified in Edge before and after | ✅ fixed |
+| 2026-10-13 | Phases 1–2 merged to `main` (PR #1, #2) | ✅ |
+| 2026-10-13 | Phase 3: Spring AMQP 4.1.1. Topic exchange + `notification.queue` + DLX/`notification.dlq`; Jackson 3 JSON converter (trusted package limited to the event package); publish via `@TransactionalEventListener(AFTER_COMMIT)`; `@RabbitListener` consumer; retries via Boot properties (`max-retries=2`, as `max-attempts` was replaced in Boot 4); custom `MessageRecoverer` records FAILED (Oracle `MERGE`) then dead-letters; dedup on `UNIQUE(EVENT_ID)` | ✅ |
+| 2026-10-13 | Added read-only `GET /api/requests/{id}/notifications` + UI Notifications panel to show publish → consume → log (brief §10 "clear way to demonstrate") | ✅ |
+| 2026-10-13 | First test run: test Oracle container hit Testcontainers' 60 s startup timeout while Docker was also pulling RabbitMQ → raised to 4 min; one unit test's mock did not set a generated id → fixed | ✅ fixed |
+| 2026-10-13 | `mvnw test`: **41 run, 0 failures, 0 skipped** (incl. 5 messaging integration tests on real RabbitMQ + Oracle: publish→consume→log, reviewed event, duplicate delivery stored once, retries→FAILED→DLQ with matching message id, rollback publishes nothing). Log trace: failing event received exactly 3 times, then dead-lettered | ✅ |
+| 2026-10-13 | Live check vs compose RabbitMQ: bindings as designed; happy path PROCESSED ×2; `Legacy Mainframe` → FAILED + 1 msg in DLQ with `x-death reason=rejected`. (Management API showed a stale "1 message" in the main queue; `rabbitmqctl` confirmed 0.) | ✅ |
+| 2026-10-13 | `ng test`: 23 pass; browser check in Edge: Notifications panel shows Submitted/Reviewed PROCESSED and the FAILED one with its error; no console errors | ✅ Phase 3 exit criteria met |
+| — | Not verified: replaying a dead-lettered message (needs the shovel plugin or a manual re-publish). The FAILED → PROCESSED code path for a replay is unit-tested only | ⚠️ open |
 
 ---
 

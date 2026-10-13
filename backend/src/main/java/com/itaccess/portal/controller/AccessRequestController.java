@@ -6,9 +6,11 @@ import com.itaccess.portal.dto.request.ReviewRequest;
 import com.itaccess.portal.dto.response.AccessRequestDetailResponse;
 import com.itaccess.portal.dto.response.AccessRequestResponse;
 import com.itaccess.portal.dto.response.HistoryEntryResponse;
+import com.itaccess.portal.dto.response.NotificationLogResponse;
 import com.itaccess.portal.dto.response.PageResponse;
 import com.itaccess.portal.security.CurrentUser;
 import com.itaccess.portal.service.AccessRequestService;
+import com.itaccess.portal.service.NotificationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -35,9 +37,11 @@ import java.util.List;
 public class AccessRequestController {
 
     private final AccessRequestService service;
+    private final NotificationService notificationService;
 
-    public AccessRequestController(AccessRequestService service) {
+    public AccessRequestController(AccessRequestService service, NotificationService notificationService) {
         this.service = service;
+        this.notificationService = notificationService;
     }
 
     @PostMapping
@@ -72,5 +76,15 @@ public class AccessRequestController {
     @GetMapping("/{id}/history")
     public List<HistoryEntryResponse> history(@PathVariable long id) {
         return service.history(id);
+    }
+
+    /**
+     * Notifications recorded by the RabbitMQ consumer for this request. Read-only; used to show that
+     * an event was published, consumed and logged. Processing is asynchronous, so a brand-new request
+     * may have none for a moment.
+     */
+    @GetMapping("/{id}/notifications")
+    public List<NotificationLogResponse> notifications(@PathVariable long id) {
+        return notificationService.forRequest(id);
     }
 }
