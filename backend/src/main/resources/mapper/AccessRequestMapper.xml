@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itaccess.portal.mapper.AccessRequestMapper">
+
+    <!-- Reusable column list so every SELECT returns the same shape. -->
+    <sql id="requestColumns">
+        r.ID, r.REQUESTER_NAME, r.SYSTEM_NAME, r.ACCESS_LEVEL, r.REASON, r.STATUS, r.CREATED_AT, r.UPDATED_AT
+    </sql>
+
+    <!-- WHERE clause shared by search and count. <where> drops the leading AND when needed. -->
+    <sql id="searchWhere">
+        <where>
+            <if test="criteria.status != null">
+                AND r.STATUS = #{criteria.status}
+            </if>
+            <if test="criteria.searchPattern != null">
+                AND (UPPER(r.REQUESTER_NAME) LIKE #{criteria.searchPattern} ESCAPE '\'
+                     OR UPPER(r.SYSTEM_NAME) LIKE #{criteria.searchPattern} ESCAPE '\')
+            </if>
+        </where>
+    </sql>
+
+    <!--
+        Oracle returns the IDENTITY value through getGeneratedKeys, but only when the driver is told
+        which column to return, so keyColumn is required (keyProperty alone is not enough on Oracle).
+    -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="ID">
+        INSERT INTO ACCESS_REQUEST (REQUESTER_NAME, SYSTEM_NAME, ACCESS_LEVEL, REASON, STATUS, CREATED_AT, UPDATED_AT)
+        VALUES (#{requesterName}, #{systemName}, #{accessLevel}, #{reason}, #{status}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="findById" resultType="AccessRequest">
+        SELECT <include refid="requestColumns"/>
+        FROM ACCESS_REQUEST r
+        WHERE r.ID = #{id}
+    </select>
+
+    <!--
+        One query instead of two: the join returns one row per history entry, and the resultMap
+        folds those rows back into a single AccessRequest (grouped by <id>) with a history list.
+        History columns are aliased with an H_ prefix so they do not clash with the request columns.
+    -->
+    <resultMap id="requestWithHistory" type="AccessRequest" autoMapping="true">
+        <id property="id" column="ID"/>
+        <collection property="history" ofType="RequestHistory" columnPrefix="H_" autoMapping="true">
+            <id property="id" column="ID"/>
+        </collection>
+    </resultMap>
+
+    <select id="findByIdWithHistory" resultMap="requestWithHistory">
+        SELECT <include refid="requestColumns"/>,
+               h.ID             AS H_ID,
+               h.REQUEST_ID     AS H_REQUEST_ID,
+               h.OLD_STATUS     AS H_OLD_STATUS,
+               h.NEW_STATUS     AS H_NEW_STATUS,
+               h.REVIEW_COMMENT AS H_REVIEW_COMMENT,
+               h.CHANGED_AT     AS H_CHANGED_AT,
+               h.CHANGED_BY     AS H_CHANGED_BY
+        FROM ACCESS_REQUEST r
+        LEFT JOIN REQUEST_HISTORY h ON h.REQUEST_ID = r.ID
+        WHERE r.ID = #{id}
+        ORDER BY h.CHANGED_AT, h.ID
+    </select>
+
+    <!-- OFFSET/FETCH is the standard paging syntax supported since Oracle 12c. -->
+    <select id="search" resultType="AccessRequest">
+        SELECT <include refid="requestColumns"/>
+        FROM ACCESS_REQUEST r
+        <include refid="searchWhere"/>
+        ORDER BY r.CREATED_AT DESC, r.ID DESC
+        OFFSET #{criteria.offset} ROWS FETCH NEXT #{criteria.limit} ROWS ONLY
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM ACCESS_REQUEST r
+        <include refid="searchWhere"/>
+    </select>
+
+    <select id="existsById" resultType="boolean">
+        SELECT COUNT(*) FROM ACCESS_REQUEST WHERE ID = #{id}
+    </select>
+
+    <!--
+        The "AND STATUS = 'PENDING'" guard makes the check-and-update atomic. If two admins review
+        the same request at once, Oracle blocks the second UPDATE until the first commits, re-checks
+        the WHERE clause, and updates 0 rows, which the service turns into a 409 Conflict.
+    -->
+    <update id="updateStatusIfPending">
+        UPDATE ACCESS_REQUEST
+        SET STATUS = #{newStatus},
+            UPDATED_AT = #{updatedAt}
+        WHERE ID = #{id}
+          AND STATUS = 'PENDING'
+    </update>
+
+</mapper>

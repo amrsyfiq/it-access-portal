@@ -1,0 +1,74 @@
+spring:
+  application:
+    name: access-portal
+  profiles:
+    default: dev
+  config:
+    # Local secrets live in the git-ignored .env at the repo root (KEY=value lines).
+    # Both paths are listed so it works whether you start from the repo root or from backend/.
+    import: "optional:file:.env[.properties],optional:file:../.env[.properties]"
+
+  datasource:
+    url: ${DB_URL:jdbc:oracle:thin:@//localhost:1521/FREEPDB1}
+    username: ${DB_USERNAME:portal}
+    password: ${DB_PASSWORD:}
+    # HikariCP is Spring Boot's default pool. Every setting is spelled out so it is visible.
+    hikari:
+      pool-name: AccessPortalPool
+      # Upper bound of open connections. Requests beyond this wait for a free connection.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      # Idle connections Hikari keeps open, ready for the next request.
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      # How long (ms) a request waits for a free connection before failing with SQLTransientConnectionException.
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:30000}
+      # Close connections idle longer than this (ms), down to minimum-idle.
+      idle-timeout: 600000
+      # Retire every connection after this age (ms), before any firewall or DB timeout kills it silently.
+      max-lifetime: 1800000
+
+  flyway:
+    # Runs db/migration/V*.sql on startup, in order, and records them in flyway_schema_history.
+    enabled: true
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  # Lets the XML say resultType="AccessRequest" instead of the fully qualified class name.
+  type-aliases-package: com.itaccess.portal.domain
+  configuration:
+    # REQUESTER_NAME -> requesterName
+    map-underscore-to-camel-case: true
+    # Oracle rejects setNull(..., Types.OTHER), MyBatis's default for null parameters without a jdbcType.
+    jdbc-type-for-null: "NULL"
+    default-fetch-size: 100
+    default-statement-timeout: 30
+
+portal:
+  auth:
+    # demo-headers: X-Demo-User / X-Demo-Role headers (development only, see DemoHeaderUserResolver)
+    mode: demo-headers
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # /actuator/metrics/hikaricp.connections.active etc. for watching the pool during development
+        include: health,info,metrics
+
+logging:
+  level:
+    com.itaccess.portal: DEBUG
+    # Logs every SQL statement and its bound parameters (MyBatis logs per mapper namespace).
+    com.itaccess.portal.mapper: DEBUG
+    com.zaxxer.hikari: INFO
