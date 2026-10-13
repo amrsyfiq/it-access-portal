@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itaccess.portal.mapper.RequestHistoryMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="ID">
+        INSERT INTO REQUEST_HISTORY (REQUEST_ID, OLD_STATUS, NEW_STATUS, REVIEW_COMMENT, CHANGED_AT, CHANGED_BY)
+        VALUES (#{requestId}, #{oldStatus}, #{newStatus}, #{reviewComment}, #{changedAt}, #{changedBy})
+    </insert>
+
+    <select id="findByRequestId" resultType="RequestHistory">
+        SELECT ID, REQUEST_ID, OLD_STATUS, NEW_STATUS, REVIEW_COMMENT, CHANGED_AT, CHANGED_BY
+        FROM REQUEST_HISTORY
+        WHERE REQUEST_ID = #{requestId}
+        ORDER BY CHANGED_AT, ID
+    </select>
+
+</mapper>

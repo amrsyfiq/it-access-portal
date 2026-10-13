@@ -1,0 +1,73 @@
+### IT Access Request Portal - sample requests (direct to Spring Boot)
+### Works with the VS Code "REST Client" extension or IntelliJ's HTTP client.
+### X-Demo-* headers are the development-only role switch (see DemoHeaderUserResolver).
+
+@baseUrl = http://localhost:8080
+
+### Health (also checks the Oracle connection)
+GET {{baseUrl}}/api/health
+
+### Submit a request (employee) -> 201 + Location header
+POST {{baseUrl}}/api/requests
+Content-Type: application/json
+X-Demo-User: ted.l
+X-Demo-Role: EMPLOYEE
+
+{
+  "requesterName": "Ted L",
+  "systemName": "GitLab",
+  "accessLevel": "WRITE",
+  "reason": "Need to push feature branches for the billing project"
+}
+
+### Validation error -> 400 problem detail with "errors"
+POST {{baseUrl}}/api/requests
+Content-Type: application/json
+
+{
+  "requesterName": "",
+  "systemName": "GitLab",
+  "reason": "short"
+}
+
+### List, filtered by status and text (requester or system name, case-insensitive)
+GET {{baseUrl}}/api/requests?status=PENDING&q=git&page=0&size=20
+
+### Details (request + history via one JOIN)
+GET {{baseUrl}}/api/requests/1
+
+### History only
+GET {{baseUrl}}/api/requests/1/history
+
+### Approve (admin) -> 200
+PATCH {{baseUrl}}/api/requests/1/status
+Content-Type: application/json
+X-Demo-User: alice.admin
+X-Demo-Role: ADMIN
+
+{
+  "status": "APPROVED",
+  "comment": "Approved for Q4"
+}
+
+### Review again -> 409 Conflict (no longer PENDING)
+PATCH {{baseUrl}}/api/requests/1/status
+Content-Type: application/json
+X-Demo-User: alice.admin
+X-Demo-Role: ADMIN
+
+{
+  "status": "REJECTED"
+}
+
+### Review as employee -> 403
+PATCH {{baseUrl}}/api/requests/1/status
+Content-Type: application/json
+X-Demo-User: ted.l
+
+{
+  "status": "APPROVED"
+}
+
+### Hikari pool metrics (dev profile only)
+GET {{baseUrl}}/actuator/metrics/hikaricp.connections.active
