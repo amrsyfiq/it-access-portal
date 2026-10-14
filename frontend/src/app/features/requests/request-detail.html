@@ -13,7 +13,12 @@
 </div>
 
 @if (flash(); as message) {
-  <div class="alert alert-success" role="status">{{ message }}</div>
+  <div class="alert alert-success alert-dismissible" role="status">
+    <span>{{ message }}</span>
+    <button type="button" class="alert-close" aria-label="Dismiss message" (click)="dismissFlash()">
+      <span aria-hidden="true">×</span>
+    </button>
+  </div>
 }
 
 @if (s.kind === 'loading') {

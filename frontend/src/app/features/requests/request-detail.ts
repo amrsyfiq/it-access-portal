@@ -85,4 +85,8 @@ export class RequestDetail {
     this.state.set({ kind: 'loaded', request });
     this.flash.set(`Request ${request.status.toLowerCase()}.`);
   }
+
+  protected dismissFlash(): void {
+    this.flash.set(null);
+  }
 }
