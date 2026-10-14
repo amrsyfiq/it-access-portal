@@ -1,9 +1,10 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
-import { Subject, catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { EMPTY, Subject, catchError, combineLatest, filter, map, of, startWith, switchMap } from 'rxjs';
 import { AccessRequestApi } from '../../core/access-request-api';
 import { ApiError, toApiError } from '../../core/api-error';
+import { LiveUpdatesService } from '../../core/live-updates';
 import { NotificationLogEntry } from '../../core/models';
 
 type PanelState =
@@ -24,7 +25,7 @@ type PanelState =
         <h2 id="notifications-heading">Notifications</h2>
         <button class="btn btn-small" type="button" (click)="refresh()">Refresh</button>
       </div>
-      <p class="muted hint">Recorded asynchronously by the Kafka consumer.</p>
+      <p class="muted hint">Recorded asynchronously by the Kafka consumer; updates live.</p>
       @let s = state();
       @if (s.kind === 'loading') {
         <p class="muted"><span class="spinner"></span> Loading…</p>
@@ -92,6 +93,15 @@ export class NotificationsPanel {
         takeUntilDestroyed(),
       )
       .subscribe((s) => this.state.set(s));
+
+    // Live updates: the consumer recorded a notification for this request -> reload quietly.
+    inject(LiveUpdatesService)
+      .events$.pipe(
+        filter((e) => e.type === 'notification' && e.data.requestId === this.requestId()),
+        switchMap(() => this.api.notifications(this.requestId()).pipe(catchError(() => EMPTY))),
+        takeUntilDestroyed(),
+      )
+      .subscribe((entries) => this.state.set({ kind: 'loaded', entries }));
   }
 
   protected refresh(): void {

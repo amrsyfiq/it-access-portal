@@ -1,14 +1,16 @@
 import { HttpTestingController } from '@angular/common/http/testing';
 import { RouterTestingHarness } from '@angular/router/testing';
+import { FakeLiveUpdates } from '../../testing/fake-live-updates';
 import { aRequest, render, setUpApp } from '../../testing/test-setup';
 import { RequestList } from './request-list';
 
 describe('RequestList', () => {
   let harness: RouterTestingHarness;
   let http: HttpTestingController;
+  let live: FakeLiveUpdates;
 
   beforeEach(async () => {
-    ({ harness, http } = await setUpApp());
+    ({ harness, http, live } = await setUpApp());
   });
 
   afterEach(() => http.verify());
@@ -86,5 +88,24 @@ describe('RequestList', () => {
     const el = await render(harness);
 
     expect(el.textContent).toContain('Cannot reach the server');
+  });
+
+  it('re-runs the current query quietly when any request changes (live update)', async () => {
+    await harness.navigateByUrl('/requests?status=PENDING', RequestList);
+    await render(harness);
+    http.expectOne((r) => listCall(r.url)).flush({ items: [aRequest({ id: 1 })], page: 0, size: 20, totalItems: 1 });
+    await render(harness);
+
+    live.events.next({
+      type: 'request',
+      data: { requestId: 2, eventType: 'AccessRequestSubmitted', status: 'PENDING', actor: 'ted.l', occurredAt: '' },
+    });
+    const req = http.expectOne((r) => listCall(r.url));
+    expect(req.request.params.get('status')).toBe('PENDING'); // same filter as on screen
+    req.flush({ items: [aRequest({ id: 2 }), aRequest({ id: 1 })], page: 0, size: 20, totalItems: 2 });
+    const el = await render(harness);
+
+    expect(el.querySelectorAll('tbody tr').length).toBe(2);
+    expect(el.textContent).not.toContain('Loading requests');
   });
 });

@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth';
 import { DEMO_USERS, DemoUserService } from './core/demo-user';
+import { LiveUpdatesService } from './core/live-updates';
 import { SessionService } from './core/session';
 
 @Component({
@@ -14,6 +15,7 @@ export class App {
   protected readonly session = inject(SessionService);
   protected readonly demoUser = inject(DemoUserService);
   protected readonly auth = inject(AuthService);
+  protected readonly live = inject(LiveUpdatesService);
   protected readonly users = DEMO_USERS;
 
   protected onUserChange(event: Event): void {

@@ -1,11 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
+import { FakeLiveUpdates, provideFakeLiveUpdates } from './testing/fake-live-updates';
 
 describe('App shell', () => {
+  let live: FakeLiveUpdates;
+
   beforeEach(() => {
     localStorage.clear();
-    TestBed.configureTestingModule({ imports: [App], providers: [provideRouter([])] });
+    const fake = provideFakeLiveUpdates();
+    live = fake.fake;
+    TestBed.configureTestingModule({ imports: [App], providers: [provideRouter([]), fake.provider] });
   });
 
   async function renderApp(): Promise<HTMLElement> {
@@ -43,5 +48,15 @@ describe('App shell', () => {
 
     expect(fixture.nativeElement.querySelector('nav')?.textContent).toContain('Review queue');
     expect(localStorage.getItem('itaccess.demoUser')).toBe('alice.admin');
+  });
+
+  it('shows the Live badge only while the live-update stream is connected', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.live-badge')).toBeNull();
+
+    live.connected.set(true);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.live-badge')?.textContent).toContain('Live');
   });
 });
