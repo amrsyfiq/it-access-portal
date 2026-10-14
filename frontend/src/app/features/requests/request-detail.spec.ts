@@ -92,6 +92,22 @@ describe('RequestDetail', () => {
     expect(el.querySelector('.timeline')?.textContent).toContain('Approved for Q4');
   });
 
+  it('lets the user dismiss the success message', async () => {
+    let el = await open('alice.admin', 'PENDING');
+    (Array.from(el.querySelectorAll('app-review-panel button')).find((b) => b.textContent?.includes('Approve')) as HTMLButtonElement).click();
+    await render(harness);
+    http.expectOne('/api/requests/7/status').flush(aDetail({ id: 7, status: 'APPROVED' }));
+    el = await render(harness);
+    expect(el.querySelector('[role=status]')?.textContent).toContain('Request approved.');
+
+    (el.querySelector('[role=status] button[aria-label="Dismiss message"]') as HTMLButtonElement).click();
+    el = await render(harness);
+
+    expect(el.querySelector('[role=status]')).toBeNull();
+    // only the message goes away; the request itself is still shown
+    expect(el.querySelector('.summary app-status-badge')?.textContent).toContain('APPROVED');
+  });
+
   it('shows the conflict message and reloads when someone else already reviewed it', async () => {
     let el = await open('alice.admin', 'PENDING');
     (Array.from(el.querySelectorAll('app-review-panel button')).find((b) => b.textContent?.includes('Reject')) as HTMLButtonElement).click();
