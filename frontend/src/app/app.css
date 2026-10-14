@@ -64,10 +64,42 @@ nav a.active {
 
 .topbar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 16px;
   padding: 12px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+/* Shown while the live-update (SSE) stream is connected. */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
 }
 
 .user-switch {

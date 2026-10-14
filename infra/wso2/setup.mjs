@@ -62,6 +62,7 @@ const OPERATIONS = [
   { verb: 'PATCH', target: '/requests/{id}/status', scope: 'access_request:review' },
   { verb: 'GET', target: '/requests/{id}/history', scope: 'access_request:read' },
   { verb: 'GET', target: '/requests/{id}/notifications', scope: 'access_request:read' },
+  { verb: 'GET', target: '/events/stream', scope: 'access_request:read' }, // live updates (SSE)
   { verb: 'GET', target: '/health', scope: null }, // public: no token needed
 ];
 
@@ -108,6 +109,22 @@ async function main() {
   let api = found.list.find((a) => a.name === API.name && a.version === API.version);
   if (api) {
     log(`API exists (${api.id}), status ${api.lifeCycleStatus}`);
+    // Resources added to OPERATIONS after the API was first created (e.g. /events/stream): add them
+    // and deploy a new revision, so re-running this script upgrades an existing setup.
+    const full = await publisher('GET', `/apis/${api.id}`);
+    const has = (op) => full.operations.some((o) => o.verb === op.verb && o.target === op.target);
+    const missing = OPERATIONS.filter((op) => !has(op));
+    if (missing.length > 0) {
+      full.operations = [...full.operations, ...missing.map(toOperation)];
+      await publisher('PUT', `/apis/${api.id}`, full);
+      const revision = await publisher('POST', `/apis/${api.id}/revisions`, {
+        description: `Added ${missing.map((op) => `${op.verb} ${op.target}`).join(', ')} (setup.mjs)`,
+      });
+      await publisher('POST', `/apis/${api.id}/deploy-revision?revisionId=${revision.id}`, [
+        { name: 'Default', vhost: 'localhost', displayOnDevportal: true },
+      ]);
+      log(`added ${missing.map((op) => `${op.verb} ${op.target}`).join(', ')}; ${revision.displayName} deployed`);
+    }
   } else {
     api = await publisher('POST', '/apis', {
       name: API.name,
@@ -126,13 +143,7 @@ async function main() {
         shared: false,
         scope: { name: s.name, displayName: s.name, description: s.description, bindings: s.roles },
       })),
-      operations: OPERATIONS.map((op) => ({
-        target: op.target,
-        verb: op.verb,
-        authType: op.scope ? 'Application & Application User' : 'None',
-        throttlingPolicy: 'Unlimited',
-        scopes: op.scope ? [op.scope] : [],
-      })),
+      operations: OPERATIONS.map(toOperation),
     });
     log(`API created (${api.id})`);
   }
@@ -200,12 +211,27 @@ async function main() {
     log('production keys updated (public client, PKCE required)');
   }
 
+  // WSO2 reveals the client secret only once, when the keys are generated; afterwards the API returns
+  // it masked ("5f4****"). So on a re-run keep the secret saved by the first run.
+  const appEnvFile = join(generatedDir, 'app.env');
+  let clientSecret = prod.consumerSecret;
+  if (!clientSecret || clientSecret.includes('*')) {
+    const saved = existsSync(appEnvFile) ? loadDotEnvFile(appEnvFile) : {};
+    clientSecret = saved.WSO2_CLIENT_ID === prod.consumerKey ? saved.WSO2_CLIENT_SECRET : '';
+    if (!clientSecret || clientSecret.includes('*')) {
+      clientSecret = '';
+      log('WARNING: the client secret is unknown (WSO2 shows it only once). The browser login does not need it;');
+      log('         for the curl examples, delete the application "AccessPortalWeb" in the Developer Portal');
+      log('         (https://localhost:9443/devportal) and run this script again to get new keys.');
+    }
+  }
+
   step('5. Generated files (git-ignored)');
   mkdirSync(generatedDir, { recursive: true });
-  writeFileSync(join(generatedDir, 'app.env'), [
+  writeFileSync(appEnvFile, [
     '# Written by infra/wso2/setup.mjs. Do not commit.',
     `WSO2_CLIENT_ID=${prod.consumerKey}`,
-    `WSO2_CLIENT_SECRET=${prod.consumerSecret}`,
+    `WSO2_CLIENT_SECRET=${clientSecret}`,
     `WSO2_TOKEN_URL=${MGMT}/oauth2/token`,
     `WSO2_GATEWAY_URL=https://localhost:8243${API.context}/${API.version}`,
     '',
@@ -234,6 +260,16 @@ async function main() {
 
 // ---------------------------------------------------------------------------------------------
 // helpers
+
+function toOperation(op) {
+  return {
+    target: op.target,
+    verb: op.verb,
+    authType: op.scope ? 'Application & Application User' : 'None',
+    throttlingPolicy: 'Unlimited',
+    scopes: op.scope ? [op.scope] : [],
+  };
+}
 
 async function waitForServer() {
   for (let i = 0; i < 40; i++) {
@@ -321,13 +357,17 @@ async function json(res, what) {
 }
 
 function loadDotEnv(file) {
-  if (!existsSync(file)) throw new Error(`${file} not found: copy .env.example to .env first`);
+  if (!existsSync(file)) throw new Error(`${file} not found: run node infra/init-env.mjs first`);
+  return { ...loadDotEnvFile(file), ...process.env };
+}
+
+function loadDotEnvFile(file) {
   const values = {};
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
     const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
     if (m) values[m[1]] = m[2];
   }
-  return { ...values, ...process.env };
+  return values;
 }
 
 function required(name) {

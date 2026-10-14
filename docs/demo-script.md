@@ -6,7 +6,7 @@ Step 6 runs the same app through the WSO2 API Manager gateway with a real OAuth2
 ## 0. Start everything
 
 ```bash
-docker compose up -d oracle kafka      # wait for "(healthy)" in: docker compose ps
+docker compose up -d oracle kafka mailpit   # wait for "(healthy)" in: docker compose ps
 cd backend && ./mvnw spring-boot:run   # terminal 1, http://localhost:8080
 cd frontend && npm start               # terminal 2, http://localhost:4200
 ```
@@ -87,6 +87,11 @@ SQL
 ### 3c. What does *not* get published
 
 A review that fails and rolls back (e.g. the transaction-rollback integration test) raises its event inside the transaction, but the event is only sent **after commit**, so nothing is published. This is covered by `MessagingIntegrationTest.rolledBackReviewPublishesNothing`.
+
+### 3d. Emails and live updates
+
+- **Mailpit inbox** (http://localhost:8025): the submission produced *"New access request #…"* to it-admins@example.com. After step 4, *"Your access request #… was approved"* arrives for ted.l@example.com.
+- **Live:** keep Ted's request page open in one window and do step 4 in **another window** (e.g. a private window, switched to Alice). Ted's page changes to APPROVED by itself, with the banner *"Updated live: this request was approved."*. Full walkthrough: [email-and-live-updates.md](email-and-live-updates.md#try-it).
 
 ## 4. Administrator approves
 

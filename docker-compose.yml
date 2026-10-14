@@ -1,5 +1,5 @@
 # Local infrastructure for the IT Access Request Portal.
-#   docker compose up -d                      -> Oracle + Kafka
+#   docker compose up -d                      -> Oracle + Kafka + Mailpit
 #   docker compose --profile ui up -d         -> also Kafka UI on http://localhost:8081
 #   docker compose --profile gateway up -d    -> also WSO2 API Manager (needs ~3 GB RAM extra)
 # Values come from .env (copy .env.example first).
@@ -58,6 +58,22 @@ services:
       timeout: 10s
       retries: 12
       start_period: 15s
+
+  mailpit:
+    # Fake mail server for development: accepts every email on SMTP :1025 and shows it in a web inbox.
+    # Nothing is delivered to real addresses.
+    image: axllent/mailpit:v1.31.3
+    container_name: portal-mailpit
+    ports:
+      - "1025:1025"   # SMTP (the backend sends here)
+      - "8025:8025"   # web inbox: http://localhost:8025
+    environment:
+      MP_MAX_MESSAGES: 500
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
   kafka-ui:
     # Optional web UI to browse topics, messages and consumer groups: docker compose --profile ui up -d

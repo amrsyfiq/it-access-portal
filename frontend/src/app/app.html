@@ -18,6 +18,11 @@
 
   <div class="main">
     <header class="topbar">
+      @if (live.connected()) {
+        <span class="live-badge" title="Changes made by others appear automatically">
+          <span class="live-dot" aria-hidden="true"></span> Live
+        </span>
+      }
       @if (session.mode === 'demo') {
         <label class="user-switch">
           <span class="user-switch-label">Demo user <small>(dev only)</small></span>

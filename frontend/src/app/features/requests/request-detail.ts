@@ -1,10 +1,11 @@
 import { DatePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subject, catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { EMPTY, Subject, catchError, combineLatest, filter, map, of, startWith, switchMap } from 'rxjs';
 import { AccessRequestApi } from '../../core/access-request-api';
 import { ApiError, toApiError } from '../../core/api-error';
+import { LiveUpdatesService } from '../../core/live-updates';
 import { SessionService } from '../../core/session';
 import { AccessRequestDetail } from '../../core/models';
 import { StatusBadge } from '../../shared/status-badge';
@@ -43,6 +44,7 @@ export class RequestDetail {
 
   constructor() {
     const id$ = this.route.paramMap.pipe(map((params) => Number(params.get('id'))));
+    const currentId = toSignal(id$);
     combineLatest([id$, this.reload$.pipe(startWith(undefined))])
       .pipe(
         switchMap(([id]) =>
@@ -55,6 +57,23 @@ export class RequestDetail {
         takeUntilDestroyed(),
       )
       .subscribe((state) => this.state.set(state));
+
+    // Live updates: someone changed THIS request (e.g. an admin approved it while the employee is
+    // looking at it). Reload it quietly, without the loading spinner.
+    inject(LiveUpdatesService)
+      .events$.pipe(
+        filter((e) => e.type === 'request' && e.data.requestId === currentId()),
+        switchMap(() => this.api.get(currentId()!).pipe(catchError(() => EMPTY))),
+        takeUntilDestroyed(),
+      )
+      .subscribe((request) => {
+        const before = this.state();
+        this.state.set({ kind: 'loaded', request });
+        // Only announce changes made elsewhere: our own approve/reject already updated the page.
+        if (before.kind === 'loaded' && before.request.status !== request.status) {
+          this.flash.set(`Updated live: this request was ${request.status.toLowerCase()}.`);
+        }
+      });
   }
 
   protected reload(): void {

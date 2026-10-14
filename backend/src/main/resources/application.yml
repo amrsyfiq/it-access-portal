@@ -58,6 +58,16 @@ spring:
         spring.json.use.type.headers: false
         spring.json.trusted.packages: com.itaccess.portal.messaging.event
 
+  mail:
+    # Local: Mailpit catches every email (web inbox http://localhost:8025); nothing leaves your machine.
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    properties:
+      # Fail fast if the SMTP server is down, so the Kafka retry/dead-letter handling kicks in quickly.
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   # Lets the XML say resultType="AccessRequest" instead of the fully qualified class name.
@@ -76,9 +86,20 @@ portal:
     # gateway-jwt:  signed X-JWT-Assertion from the WSO2 gateway (profile "gateway", see GatewaySecurityConfig)
     mode: demo-headers
   notifications:
-    # Demo switch: notifications for this system name fail, to show retries + the dead-letter queue.
+    # Demo switch: notifications for this system name fail, to show retries + the dead-letter topic.
     # Empty = never fail.
     fail-for-system: ${NOTIFICATIONS_FAIL_FOR_SYSTEM:}
+    mail:
+      from: IT Access Portal <no-reply@itaccess.example>
+      # "Request submitted" emails go to the administrators.
+      admin-address: ${NOTIFICATIONS_ADMIN_ADDRESS:it-admins@example.com}
+      # "Request approved/rejected" emails go to <submitter username>@<user-domain>.
+      user-domain: ${NOTIFICATIONS_USER_DOMAIN:example.com}
+  live:
+    # Server-Sent Events: how long one stream stays open before the browser reconnects, and how
+    # often an empty heartbeat is sent so proxies do not close an idle connection.
+    stream-timeout: 5m
+    heartbeat-interval: 20s
   kafka:
     # Consumer retries before a record goes to the dead-letter topic: 1 attempt + 2 retries (1s, then 2s).
     retry:

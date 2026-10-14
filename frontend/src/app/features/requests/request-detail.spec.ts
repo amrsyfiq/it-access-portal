@@ -3,15 +3,17 @@ import { TestBed } from '@angular/core/testing';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { DemoUserService } from '../../core/demo-user';
 import { RequestStatus } from '../../core/models';
+import { FakeLiveUpdates } from '../../testing/fake-live-updates';
 import { aDetail, render, setUpApp } from '../../testing/test-setup';
 import { RequestDetail } from './request-detail';
 
 describe('RequestDetail', () => {
   let harness: RouterTestingHarness;
   let http: HttpTestingController;
+  let live: FakeLiveUpdates;
 
   beforeEach(async () => {
-    ({ harness, http } = await setUpApp());
+    ({ harness, http, live } = await setUpApp());
   });
 
   afterEach(() => {
@@ -137,5 +139,44 @@ describe('RequestDetail', () => {
 
     expect(el.querySelector('[role=alert]')?.textContent).toContain('Access request 99 was not found');
     expect(el.querySelector('[role=alert] button')).toBeNull();
+  });
+
+  it('updates live when someone else approves the request being viewed', async () => {
+    let el = await open('ted.l', 'PENDING');
+
+    // a change to another request does not reload this page
+    live.events.next({
+      type: 'request',
+      data: { requestId: 8, eventType: 'AccessRequestReviewed', status: 'APPROVED', actor: 'alice.admin', occurredAt: '' },
+    });
+    http.expectNone('/api/requests/7');
+
+    live.events.next({
+      type: 'request',
+      data: { requestId: 7, eventType: 'AccessRequestReviewed', status: 'APPROVED', actor: 'alice.admin', occurredAt: '' },
+    });
+    http.expectOne('/api/requests/7').flush(aDetail({ id: 7, status: 'APPROVED' }));
+    el = await render(harness);
+
+    expect(el.querySelector('.summary app-status-badge')?.textContent).toContain('APPROVED');
+    expect(el.querySelector('[role=status]')?.textContent).toContain('Updated live: this request was approved.');
+    expect(el.querySelector('.awaiting')).toBeNull();
+  });
+
+  it('does not announce its own review a second time when the live event arrives', async () => {
+    let el = await open('alice.admin', 'PENDING');
+    (Array.from(el.querySelectorAll('app-review-panel button')).find((b) => b.textContent?.includes('Approve')) as HTMLButtonElement).click();
+    await render(harness);
+    http.expectOne('/api/requests/7/status').flush(aDetail({ id: 7, status: 'APPROVED' }));
+    await render(harness);
+
+    live.events.next({
+      type: 'request',
+      data: { requestId: 7, eventType: 'AccessRequestReviewed', status: 'APPROVED', actor: 'alice.admin', occurredAt: '' },
+    });
+    http.expectOne('/api/requests/7').flush(aDetail({ id: 7, status: 'APPROVED' }));
+    el = await render(harness);
+
+    expect(el.querySelector('[role=status]')?.textContent).toContain('Request approved.');
   });
 });

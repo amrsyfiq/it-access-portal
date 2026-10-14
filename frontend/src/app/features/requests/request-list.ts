@@ -2,9 +2,10 @@ import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Subject, catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
+import { EMPTY, Subject, catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import { AccessRequestApi } from '../../core/access-request-api';
 import { ApiError, toApiError } from '../../core/api-error';
+import { LiveUpdatesService } from '../../core/live-updates';
 import { AccessRequest, Page, REQUEST_STATUSES, RequestStatus } from '../../core/models';
 import { StatusBadge } from '../../shared/status-badge';
 
@@ -66,6 +67,15 @@ export class RequestList {
         takeUntilDestroyed(),
       )
       .subscribe((state) => this.state.set(state));
+
+    // Live updates: any request was submitted or reviewed -> re-run the current query quietly,
+    // so new requests and status changes appear without a reload or a spinner.
+    inject(LiveUpdatesService)
+      .events$.pipe(
+        switchMap(() => this.api.list({ ...this.query(), size: PAGE_SIZE }).pipe(catchError(() => EMPTY))),
+        takeUntilDestroyed(),
+      )
+      .subscribe((page) => this.state.set({ kind: 'loaded', page }));
   }
 
   protected onStatusChange(event: Event): void {

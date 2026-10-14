@@ -2,14 +2,18 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationLogEntry } from '../../core/models';
+import { FakeLiveUpdates, provideFakeLiveUpdates } from '../../testing/fake-live-updates';
 import { NotificationsPanel } from './notifications-panel';
 
 describe('NotificationsPanel', () => {
   let fixture: ComponentFixture<NotificationsPanel>;
   let http: HttpTestingController;
+  let live: FakeLiveUpdates;
 
   beforeEach(async () => {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const fake = provideFakeLiveUpdates();
+    live = fake.fake;
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting(), fake.provider] });
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(NotificationsPanel);
     fixture.componentRef.setInput('requestId', 7);
@@ -72,5 +76,20 @@ describe('NotificationsPanel', () => {
     http.expectOne('/api/requests/7/notifications').flush([entry({}), entry({ eventId: 'x2', eventType: 'AccessRequestReviewed' })]);
     await fixture.whenStable();
     expect(el().querySelectorAll('li').length).toBe(2);
+  });
+
+  it('reloads by itself when a notification for this request is recorded (live update)', async () => {
+    http.expectOne('/api/requests/7/notifications').flush([entry({})]);
+    await fixture.whenStable();
+
+    // an event about another request is ignored
+    live.events.next({ type: 'notification', data: { requestId: 8, eventId: 'x', processingStatus: 'PROCESSED' } });
+    http.expectNone('/api/requests/7/notifications');
+
+    live.events.next({ type: 'notification', data: { requestId: 7, eventId: 'x2', processingStatus: 'PROCESSED' } });
+    http.expectOne('/api/requests/7/notifications').flush([entry({}), entry({ eventId: 'x2', eventType: 'AccessRequestReviewed' })]);
+    await fixture.whenStable();
+    expect(el().querySelectorAll('li').length).toBe(2);
+    expect(el().querySelector('.spinner')).toBeNull(); // quiet reload: no loading state shown
   });
 });
