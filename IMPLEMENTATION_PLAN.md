@@ -1,6 +1,6 @@
 # Implementation Plan — IT Access Request Portal
 
-Status: **Phases 1–4 complete (Oracle 23ai, Apache Kafka 4.2, WSO2 API Manager 4.7; verified in a real browser). Next: Phase 5 — quality and documentation.**
+Status: **All phases (0–5) complete** (Oracle 23ai, Apache Kafka 4.2, WSO2 API Manager 4.7; verified from a fresh clone and in a real browser, 2026-10-14). See §7.
 Last updated: 2026-10-13
 
 Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static frontend system catalog, package `com.itaccess.portal`. **2026-10-14: messaging changed from RabbitMQ to Apache Kafka** (team/company standard). This intentionally overrides the brief's "do not replace requested technologies" for this one component; RabbitMQ is no longer part of the project.
@@ -49,6 +49,10 @@ Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static fr
 | 2026-10-14 | Browser (Edge) through the real WSO2 login page: ted signs in (consent) → EMPLOYEE, submits; sign-out via WSO2 logout page; alice → ADMIN, approves; notifications via Kafka through the gateway; every API call Bearer, the token call without a secret. Console errors only from WSO2's own login page (`<svg>` attribute) | ✅ |
 | 2026-10-14 | Reproducibility: WSO2 container deleted and recreated, `setup.mjs` once (10 s), the security matrix and browser flow re-run → identical results. Demo mode regression walkthrough passes | ✅ Phase 4 exit criteria met |
 | — | Not verified in Phase 4: refresh tokens, token revocation, multiple gateway nodes; WSO2's "default internal credentials" warning left as-is (local only) | ⚠️ open |
+| 2026-10-14 | Phase 4 merged (PR #5). Phase 5 audit: `.env.example`'s `WSO2_ENCRYPTION_KEY` placeholder was not hex (copying it verbatim would break WSO2) → `infra/init-env.mjs` creates `.env` with correctly formatted random secrets, never overwrites | ✅ fixed |
+| 2026-10-14 | Docs: `docs/architecture.md` (6 Mermaid diagrams: system, layers, submit sequence, PKCE/gateway sequence, ER model, lifecycle; decisions; limitations and production improvements), `docs/concepts.md` (brief §8/§11/§18 explanations), README restructured (quick start, docs index, stack, layout). Diagrams rendered in Edge: one parse error (`;` ends a statement in sequence diagrams) and clipped titles fixed. Link checker: 38 links + anchors OK | ✅ |
+| 2026-10-14 | Fresh clone (no `.env`, `node_modules`, generated files): `init-env` → `npm ci` → 31 tests + both builds; `./mvnw test` 56/0/0 | ✅ |
+| 2026-10-14 | Final acceptance in gateway mode: browser flow OK; failure path FAILED after 3 deliveries. The notifications panel looked empty or stuck on "Loading…" in two runs: caused by the test script reading mid-reload (and once by a regex the shell mangled), confirmed by sampling the panel at +100 ms / +500 ms / +3 s (both PROCESSED each time). Not an app bug | ✅ Phase 5 exit criteria met |
 
 ---
 
@@ -210,8 +214,29 @@ topic access-request.events.DLT    3 partitions; failed record copied to the sam
 | 4 | WSO2 gateway + OAuth2 | Authorized call OK, unauthorized rejected, Angular via gateway | WSO2 container |
 | 5 | Docs, diagram, demo script, final test run | Another dev can reproduce the demo from the README | All |
 
-## 6. Open decisions
+## 6. Decisions (all resolved)
 
-1. **How to run the infrastructure** (blocks verifying Phase 1+). Recommended: enable Virtual Machine Platform → install Docker Desktop → `docker compose up`. Alternatives: native Windows installs of Oracle 23ai Free / Kafka / WSO2 (zip), or an existing Oracle DB.
-2. **System catalog source:** static frontend list (default) vs a DB table + endpoint.
-3. Base Java package: `com.itaccess.portal` (default; easy to change now, painful later).
+| # | Question (Phase 0) | Decision |
+|---|---|---|
+| 1 | How to run the infrastructure | Docker Desktop (Virtual Machine Platform enabled, reboot); Compose for Oracle, Kafka, WSO2 |
+| 2 | System catalog source | Static, typed list in the frontend (`system-catalog.ts`); not mock API data |
+| 3 | Base Java package | `com.itaccess.portal` |
+| 4 | Messaging broker (2026-10-14) | **Apache Kafka** instead of RabbitMQ (team standard; overrides the brief for this one component) |
+| 5 | Actor identity in gateway mode (2026-10-14) | WSO2 user id (4.7 passes no username with JWT access tokens) |
+| 6 | Angular login in gateway mode (2026-10-14) | Authorization code + PKCE, public client |
+
+## 7. Final state (Phase 5, 2026-10-14)
+
+All phases complete. Final verification on this date:
+
+| Check | Result |
+|---|---|
+| `./mvnw test` (working copy and a **fresh clone**) | 56 run, 0 failures, **0 skipped** (Oracle 23ai + Kafka 4.2 via Testcontainers) |
+| `ng test` / `ng build` both configurations (fresh clone after `npm ci`) | 31 pass / clean |
+| Fresh clone needs nothing beyond `node infra/init-env.mjs` | ✅ (no hidden dependency on local files) |
+| Browser, gateway mode: WSO2 login (PKCE) → submit (employee) → sign out → approve (admin) → Kafka notifications | ✅ |
+| Failure path through the gateway (`Legacy Mainframe`) | FAILED after exactly 3 deliveries, dead-lettered |
+| Browser, direct mode (demo users), incl. 390 px layout | ✅ (after Phase 4) |
+| Docs: 6 Mermaid diagrams render; 38 relative links + anchors resolve | ✅ |
+
+Known limitations and production improvements: [docs/architecture.md §8](docs/architecture.md#8-known-limitations-and-production-improvements).
