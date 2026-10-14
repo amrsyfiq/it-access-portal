@@ -10,7 +10,10 @@ import com.itaccess.portal.exception.InvalidStatusTransitionException;
 import com.itaccess.portal.exception.NotFoundException;
 import com.itaccess.portal.security.CurrentUser;
 import com.itaccess.portal.security.Role;
+import com.itaccess.portal.domain.ProcessingStatus;
+import com.itaccess.portal.dto.response.NotificationLogResponse;
 import com.itaccess.portal.service.AccessRequestService;
+import com.itaccess.portal.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -20,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -45,6 +49,9 @@ class AccessRequestControllerTest {
 
     @MockitoBean
     private AccessRequestService service;
+
+    @MockitoBean
+    private NotificationService notificationService;
 
     @Test
     void createReturns201WithLocation() throws Exception {
@@ -152,5 +159,17 @@ class AccessRequestControllerTest {
                                 {"status":"PENDING"}"""))
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(service);
+    }
+
+    @Test
+    void notificationsListsWhatTheConsumerRecorded() throws Exception {
+        when(notificationService.forRequest(7L)).thenReturn(List.of(new NotificationLogResponse(
+                "b9c4e7e2-0000-4000-8000-000000000001", "AccessRequestSubmitted", ProcessingStatus.PROCESSED,
+                OffsetDateTime.parse("2026-10-13T08:00:00Z"), OffsetDateTime.parse("2026-10-13T08:00:01Z"), null)));
+
+        mvc.perform(get("/api/requests/7/notifications"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eventType").value("AccessRequestSubmitted"))
+                .andExpect(jsonPath("$[0].processingStatus").value("PROCESSED"));
     }
 }

@@ -14,7 +14,14 @@ describe('RequestDetail', () => {
     ({ harness, http } = await setUpApp());
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    // The notifications panel (covered by notifications-panel.spec.ts) also loads; answer it here.
+    http
+      .match((r) => r.url.endsWith('/notifications'))
+      .filter((r) => !r.cancelled) // superseded by a newer load (switchMap)
+      .forEach((r) => r.flush([]));
+    http.verify();
+  });
 
   async function open(as: 'ted.l' | 'alice.admin', status: RequestStatus): Promise<HTMLElement> {
     TestBed.inject(DemoUserService).select(as);

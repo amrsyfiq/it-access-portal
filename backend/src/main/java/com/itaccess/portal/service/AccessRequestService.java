@@ -15,9 +15,11 @@ import com.itaccess.portal.exception.InvalidStatusTransitionException;
 import com.itaccess.portal.exception.NotFoundException;
 import com.itaccess.portal.mapper.AccessRequestMapper;
 import com.itaccess.portal.mapper.RequestHistoryMapper;
+import com.itaccess.portal.messaging.event.AccessRequestEvent;
 import com.itaccess.portal.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -40,11 +42,14 @@ public class AccessRequestService {
 
     private final AccessRequestMapper requestMapper;
     private final RequestHistoryMapper historyMapper;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
-    public AccessRequestService(AccessRequestMapper requestMapper, RequestHistoryMapper historyMapper, Clock clock) {
+    public AccessRequestService(AccessRequestMapper requestMapper, RequestHistoryMapper historyMapper,
+                                ApplicationEventPublisher events, Clock clock) {
         this.requestMapper = requestMapper;
         this.historyMapper = historyMapper;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -68,6 +73,9 @@ public class AccessRequestService {
 
         log.info("Access request {} created by {} for system '{}'", request.getId(), user.username(),
                 request.getSystemName());
+        // Held by Spring until this transaction commits; then AccessRequestEventPublisher sends it.
+        events.publishEvent(AccessRequestEvent.submitted(request.getId(), request.getSystemName(), user.username(),
+                now.toInstant()));
         return AccessRequestResponse.from(request);
     }
 
@@ -119,7 +127,10 @@ public class AccessRequestService {
         historyMapper.insert(new RequestHistory(id, RequestStatus.PENDING, newStatus, comment, now, user.username()));
 
         log.info("Access request {} {} by {}", id, newStatus, user.username());
-        return get(id);
+        AccessRequestDetailResponse result = get(id);
+        events.publishEvent(AccessRequestEvent.reviewed(id, result.systemName(), newStatus, user.username(),
+                now.toInstant()));
+        return result;
     }
 
     /**

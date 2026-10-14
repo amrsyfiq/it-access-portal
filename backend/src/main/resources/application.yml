@@ -30,6 +30,34 @@ spring:
     # Runs db/migration/V*.sql on startup, in order, and records them in flyway_schema_history.
     enabled: true
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      # Wait until the broker has stored the record before reporting success.
+      acks: all
+      properties:
+        # The payload type is fixed by the consumer config below, so no Java class names in headers.
+        spring.json.add.type.headers: false
+        # Fail fast when Kafka is unreachable, so publishing after a commit does not hang the HTTP request.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
+    consumer:
+      group-id: notification-service
+      # A brand-new consumer group starts from the oldest record instead of only new ones.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ErrorHandlingDeserializer wraps the JSON one: a record with bad JSON becomes an error the error
+      # handler can dead-letter, instead of failing forever and blocking its partition ("poison pill").
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+        spring.json.value.default.type: com.itaccess.portal.messaging.event.AccessRequestEvent
+        spring.json.use.type.headers: false
+        spring.json.trusted.packages: com.itaccess.portal.messaging.event
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   # Lets the XML say resultType="AccessRequest" instead of the fully qualified class name.
@@ -46,6 +74,17 @@ portal:
   auth:
     # demo-headers: X-Demo-User / X-Demo-Role headers (development only, see DemoHeaderUserResolver)
     mode: demo-headers
+  notifications:
+    # Demo switch: notifications for this system name fail, to show retries + the dead-letter queue.
+    # Empty = never fail.
+    fail-for-system: ${NOTIFICATIONS_FAIL_FOR_SYSTEM:}
+  kafka:
+    # Consumer retries before a record goes to the dead-letter topic: 1 attempt + 2 retries (1s, then 2s).
+    retry:
+      max-retries: 2
+      initial-interval: 1s
+      multiplier: 2
+      max-interval: 10s
 
 management:
   endpoints:

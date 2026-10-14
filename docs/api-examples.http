@@ -69,5 +69,8 @@ X-Demo-User: ted.l
   "status": "APPROVED"
 }
 
+### Notifications recorded by the Kafka consumer (asynchronous: may take a moment to appear)
+GET {{baseUrl}}/api/requests/1/notifications
+
 ### Hikari pool metrics (dev profile only)
 GET {{baseUrl}}/actuator/metrics/hikaricp.connections.active

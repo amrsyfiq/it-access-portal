@@ -1,5 +1,6 @@
 # Local infrastructure for the IT Access Request Portal.
-#   docker compose up -d                      -> Oracle + RabbitMQ
+#   docker compose up -d                      -> Oracle + Kafka
+#   docker compose --profile ui up -d         -> also Kafka UI on http://localhost:8081
 #   docker compose --profile gateway up -d    -> also WSO2 API Manager (needs ~3 GB RAM extra)
 # Values come from .env (copy .env.example first).
 
@@ -25,23 +26,52 @@ services:
       retries: 30
       start_period: 30s
 
-  rabbitmq:
-    image: rabbitmq:4-management
-    container_name: portal-rabbitmq
+  kafka:
+    # Official Apache Kafka image, single node in KRaft mode (no ZooKeeper): this one process is both
+    # the broker (stores records) and the controller (manages cluster metadata).
+    image: apache/kafka:4.2.2
+    container_name: portal-kafka
     ports:
-      - "5672:5672"     # AMQP
-      - "15672:15672"   # management UI: http://localhost:15672
+      - "9092:9092"   # for the backend on your machine (localhost:9092)
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?set RABBITMQ_USERNAME in .env}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD in .env}
-    volumes:
-      - rabbitmq-data:/var/lib/rabbitmq
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      # Three listeners: HOST for apps on your machine, INTERNAL for other containers (Kafka UI),
+      # CONTROLLER for the KRaft controller itself.
+      KAFKA_LISTENERS: HOST://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      # Single node, so internal topics cannot be replicated.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Consumers join their group immediately instead of waiting 3s for others (dev only).
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Topics are created by the application (NewTopic beans), not by typos in a producer.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null"]
       interval: 10s
-      timeout: 5s
-      retries: 10
+      timeout: 10s
+      retries: 12
+      start_period: 15s
+
+  kafka-ui:
+    # Optional web UI to browse topics, messages and consumer groups: docker compose --profile ui up -d
+    image: ghcr.io/kafbat/kafka-ui:v1.5.0
+    container_name: portal-kafka-ui
+    profiles: ["ui"]
+    ports:
+      - "8081:8080"   # http://localhost:8081 (8080 is the backend)
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
 
 volumes:
   oracle-data:
-  rabbitmq-data:
