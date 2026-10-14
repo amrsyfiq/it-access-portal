@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.itaccess.portal.mapper.NotificationLogMapper">
+
+    <sql id="columns">
+        ID, EVENT_ID, REQUEST_ID, EVENT_TYPE, PROCESSING_STATUS, CREATED_AT, PROCESSED_AT, ERROR_MESSAGE
+    </sql>
+
+    <insert id="insertProcessed" useGeneratedKeys="true" keyProperty="id" keyColumn="ID">
+        INSERT INTO NOTIFICATION_LOG (EVENT_ID, REQUEST_ID, EVENT_TYPE, PROCESSING_STATUS, CREATED_AT, PROCESSED_AT)
+        VALUES (#{eventId}, #{requestId}, #{eventType}, 'PROCESSED', #{createdAt}, #{processedAt})
+    </insert>
+
+    <select id="findByEventId" resultType="NotificationLog">
+        SELECT <include refid="columns"/>
+        FROM NOTIFICATION_LOG
+        WHERE EVENT_ID = #{eventId}
+    </select>
+
+    <update id="markProcessed">
+        UPDATE NOTIFICATION_LOG
+        SET PROCESSING_STATUS = 'PROCESSED',
+            PROCESSED_AT = #{processedAt},
+            ERROR_MESSAGE = NULL
+        WHERE EVENT_ID = #{eventId}
+          AND PROCESSING_STATUS = 'FAILED'
+    </update>
+
+    <!--
+        Oracle MERGE = "insert or update" in one statement. If a FAILED row already exists for this
+        event (it was dead-lettered before), only its error message is refreshed; a PROCESSED row is
+        never downgraded (the WHERE on the UPDATE branch skips it).
+    -->
+    <update id="recordFailure">
+        MERGE INTO NOTIFICATION_LOG t
+        USING (SELECT #{eventId} AS EVENT_ID FROM DUAL) s
+        ON (t.EVENT_ID = s.EVENT_ID)
+        WHEN MATCHED THEN
+            UPDATE SET t.ERROR_MESSAGE = #{errorMessage}
+            WHERE t.PROCESSING_STATUS = 'FAILED'
+        WHEN NOT MATCHED THEN
+            INSERT (EVENT_ID, REQUEST_ID, EVENT_TYPE, PROCESSING_STATUS, CREATED_AT, ERROR_MESSAGE)
+            VALUES (#{eventId}, #{requestId}, #{eventType}, 'FAILED', #{createdAt}, #{errorMessage})
+    </update>
+
+    <select id="findByRequestId" resultType="NotificationLog">
+        SELECT <include refid="columns"/>
+        FROM NOTIFICATION_LOG
+        WHERE REQUEST_ID = #{requestId}
+        ORDER BY CREATED_AT, ID
+    </select>
+
+</mapper>

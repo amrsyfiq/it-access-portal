@@ -35,6 +35,16 @@ export interface AccessRequestDetail extends AccessRequest {
   history: HistoryEntry[];
 }
 
+/** NotificationLogResponse: written by the Kafka consumer, so it can lag the request by a moment. */
+export interface NotificationLogEntry {
+  eventId: string;
+  eventType: 'AccessRequestSubmitted' | 'AccessRequestReviewed';
+  processingStatus: 'PROCESSED' | 'FAILED';
+  createdAt: string;
+  processedAt: string | null;
+  errorMessage: string | null;
+}
+
 /** PageResponse<T> */
 export interface Page<T> {
   items: T[];

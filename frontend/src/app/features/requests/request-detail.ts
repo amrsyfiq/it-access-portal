@@ -8,6 +8,7 @@ import { ApiError, toApiError } from '../../core/api-error';
 import { DemoUserService } from '../../core/demo-user';
 import { AccessRequestDetail } from '../../core/models';
 import { StatusBadge } from '../../shared/status-badge';
+import { NotificationsPanel } from './notifications-panel';
 import { ReviewPanel } from './review-panel';
 
 type DetailState =
@@ -17,7 +18,7 @@ type DetailState =
 
 @Component({
   selector: 'app-request-detail',
-  imports: [RouterLink, DatePipe, StatusBadge, ReviewPanel],
+  imports: [RouterLink, DatePipe, StatusBadge, ReviewPanel, NotificationsPanel],
   templateUrl: './request-detail.html',
   styleUrl: './request-detail.css',
 })

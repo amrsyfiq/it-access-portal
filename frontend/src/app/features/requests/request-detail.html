@@ -55,36 +55,46 @@
       </section>
 
       @if (canReview()) {
-        <app-review-panel [requestId]="r.id" (reviewed)="onReviewed($event)" (conflict)="reload()" />
+        <app-review-panel
+          [requestId]="r.id"
+          (reviewed)="onReviewed($event)"
+          (conflict)="reload()"
+        />
       } @else if (r.status === 'PENDING') {
-        <p class="alert alert-info awaiting">Waiting for an administrator to review this request.</p>
+        <p class="alert alert-info awaiting">
+          Waiting for an administrator to review this request.
+        </p>
       }
     </div>
 
-    <section class="card history" aria-labelledby="history-heading">
-      <h2 id="history-heading">History</h2>
-      <ol class="timeline">
-        @for (h of r.history; track h.id) {
-          <li>
-            <div class="entry-head">
-              <app-status-badge [status]="h.newStatus" />
-              <time class="muted">{{ h.changedAt | date: 'medium' }}</time>
-            </div>
-            <p class="entry-text">
-              @if (h.oldStatus) {
-                {{ h.oldStatus }} → {{ h.newStatus }} by <strong>{{ h.changedBy }}</strong>
-              } @else {
-                Submitted by <strong>{{ h.changedBy }}</strong>
+    <div>
+      <section class="card history" aria-labelledby="history-heading">
+        <h2 id="history-heading">History</h2>
+        <ol class="timeline">
+          @for (h of r.history; track h.id) {
+            <li>
+              <div class="entry-head">
+                <app-status-badge [status]="h.newStatus" />
+                <time class="muted">{{ h.changedAt | date: 'medium' }}</time>
+              </div>
+              <p class="entry-text">
+                @if (h.oldStatus) {
+                  {{ h.oldStatus }} → {{ h.newStatus }} by <strong>{{ h.changedBy }}</strong>
+                } @else {
+                  Submitted by <strong>{{ h.changedBy }}</strong>
+                }
+              </p>
+              @if (h.comment) {
+                <blockquote>“{{ h.comment }}”</blockquote>
               }
-            </p>
-            @if (h.comment) {
-              <blockquote>“{{ h.comment }}”</blockquote>
-            }
-          </li>
-        } @empty {
-          <li class="muted">No history recorded.</li>
-        }
-      </ol>
-    </section>
+            </li>
+          } @empty {
+            <li class="muted">No history recorded.</li>
+          }
+        </ol>
+      </section>
+
+      <app-notifications-panel [requestId]="r.id" [reloadKey]="r.status" />
+    </div>
   </div>
 }
