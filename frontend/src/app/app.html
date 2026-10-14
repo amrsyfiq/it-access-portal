@@ -6,7 +6,12 @@
       <a
         routerLink="/requests"
         routerLinkActive="active"
-        [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
+        [routerLinkActiveOptions]="{
+          paths: 'exact',
+          queryParams: 'ignored',
+          matrixParams: 'ignored',
+          fragment: 'ignored',
+        }"
         >All requests</a
       >
       @if (session.isAdmin()) {
@@ -25,7 +30,7 @@
       }
       @if (session.mode === 'demo') {
         <label class="user-switch">
-          <span class="user-switch-label">Demo user <small>(dev only)</small></span>
+          <!-- <span class="user-switch-label">Demo user <small>(dev only)</small></span> -->
           <!-- [selected] per option, not [value] on the select: the options are rendered by @for
                after the select's value would be applied, so a restored user would not be shown. -->
           <select (change)="onUserChange($event)">
@@ -38,7 +43,9 @@
         </label>
       } @else if (auth.isAuthenticated()) {
         <div class="user-switch">
-          <span>Signed in via WSO2 · <strong>{{ session.roleLabel() }}</strong></span>
+          <span
+            >Signed in via WSO2 · <strong>{{ session.roleLabel() }}</strong></span
+          >
           <button class="btn" type="button" (click)="signOut()">Sign out</button>
         </div>
       }
