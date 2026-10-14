@@ -24,6 +24,7 @@ Spring Boot  http://localhost:8080/api/...   (profile "gateway")
 | `GET /requests`, `GET /requests/{id}`, `GET /requests/{id}/history`, `GET /requests/{id}/notifications` | `access_request:read` | `portal_employee`, `portal_admin` |
 | `POST /requests` | `access_request:submit` | `portal_employee`, `portal_admin` |
 | `PATCH /requests/{id}/status` | `access_request:review` | `portal_admin` |
+| `GET /events/stream` (live updates, Server-Sent Events) | `access_request:read` | `portal_employee`, `portal_admin` |
 | `GET /health` | none (public) | — |
 
 Demo users created by the setup script: **`ted.l`** (`portal_employee`) and **`alice.admin`** (`portal_employee` + `portal_admin`). Passwords come from `.env`.
@@ -42,13 +43,15 @@ docker compose --profile gateway ps          # wait for portal-wso2am "(healthy)
 node infra/wso2/setup.mjs
 ```
 
-`setup.mjs` is safe to re-run. It writes these git-ignored files:
+`setup.mjs` is safe to re-run: it adds resources that are missing from an existing API (e.g. `/events/stream`, added after Phase 4) and deploys a new revision. It writes these git-ignored files:
 
 | File | Contents | Used by |
 |---|---|---|
 | `infra/wso2/generated/app.env` | client id + secret, token URL, gateway URL | curl examples below |
 | `infra/wso2/generated/wso2-signing-cert.pem` | WSO2's public signing certificate | backend, to verify `X-JWT-Assertion` |
 | `frontend/public/gateway-config.json` | client id (not a secret: public client) | Angular gateway mode |
+
+WSO2 reveals an application's client **secret only once**, when its keys are generated; later API calls return it masked (`5f4****`). So `setup.mjs` keeps the secret saved by the first run, and on re-runs never overwrites it. If `app.env` was lost, the script warns; delete the application *AccessPortalWeb* in the Developer Portal and re-run to get new keys. The browser login (public client + PKCE) doesn't need the secret.
 
 WSO2's own data (users, API, application) lives inside the container. `docker compose stop`/`start` keeps it. `docker compose rm`/`down` deletes it: re-run `setup.mjs`, which generates **new** client ids.
 

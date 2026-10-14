@@ -1,6 +1,6 @@
 # IT Access Request Portal
 
-Employees request access to internal systems (GitLab, Jira, AWS, ...). Administrators approve or reject the requests, every status change is recorded in a history table, and each change sends an event through Kafka that a consumer turns into a (simulated) notification. Optionally, the whole API runs behind a WSO2 API Manager gateway with OAuth2 login.
+Employees request access to internal systems (GitLab, Jira, AWS, ...). Administrators approve or reject the requests, and every status change is recorded in a history table. Each change goes through Kafka to two consumers: one emails the people involved (caught locally by Mailpit), the other pushes the change to open browsers, so pages update live. Optionally, the whole API runs behind a WSO2 API Manager gateway with OAuth2 login.
 
 Learning and portfolio project: small enough to run on a laptop and explain in an interview, but built with enterprise patterns (layered backend, explicit SQL, transactions, asynchronous messaging, API gateway).
 
@@ -12,7 +12,8 @@ Learning and portfolio project: small enough to run on a laptop and explain in a
 | Messaging | Apache Kafka 4.2 (KRaft), Spring for Apache Kafka 4.1 |
 | API gateway | WSO2 API Manager 4.7.0, OAuth2 (authorization code + PKCE), signed backend JWT |
 | Frontend | Angular 22.2, TypeScript 6, Reactive Forms, signals, plain CSS |
-| Tests | JUnit 6, Mockito, Testcontainers 2 (Oracle, Kafka), Vitest |
+| Email / live updates | Spring Mail + Mailpit 1.31 (local SMTP catcher), Server-Sent Events (`SseEmitter`) |
+| Tests | JUnit 6, Mockito, Testcontainers 2 (Oracle, Kafka, Mailpit), Vitest |
 
 **Documentation**
 
@@ -33,7 +34,7 @@ Learning and portfolio project: small enough to run on a laptop and explain in a
 | Docker Desktop | recent | Runs Oracle, Kafka and (optionally) WSO2. Give it ≥ 8 GB RAM; WSO2 alone needs ~2 GB more |
 | Node.js | 22.22+ | For the Angular UI and the setup scripts |
 
-Ports used: 1521 (Oracle), 9092 (Kafka), 8080 (backend), 4200 (UI); gateway mode adds 9443, 8243 and 8280; the optional Kafka UI uses 8081.
+Ports used: 1521 (Oracle), 9092 (Kafka), 1025 + 8025 (Mailpit SMTP + inbox), 8080 (backend), 4200 (UI); gateway mode adds 9443, 8243 and 8280; the optional Kafka UI uses 8081.
 
 ## Quick start (direct mode)
 
@@ -41,8 +42,8 @@ Ports used: 1521 (Oracle), 9092 (Kafka), 8080 (backend), 4200 (UI); gateway mode
 # 1. Local secrets (once). Creates a git-ignored .env with random passwords.
 node infra/init-env.mjs
 
-# 2. Oracle + Kafka (first start pulls ~1.5 GB). Wait until both show "(healthy)".
-docker compose up -d oracle kafka
+# 2. Oracle, Kafka and Mailpit (first start pulls ~1.5 GB). Wait until all show "(healthy)".
+docker compose up -d oracle kafka mailpit
 docker compose ps
 
 # 3. Backend (terminal 1). Flyway creates the tables on first start.
@@ -61,6 +62,8 @@ Open http://localhost:4200 and follow the [demo script](docs/demo-script.md). In
 `ng serve` proxies `/api/*` to `http://localhost:8080` ([proxy.conf.json](frontend/proxy.conf.json)), so the browser sees one origin and the backend needs no CORS configuration.
 
 **Stop:** `Ctrl+C` in both terminals, then `docker compose stop`. `docker compose down -v` also **deletes the database volume**; Kafka's records live in the container and are removed by `down`.
+
+**Emails:** open the Mailpit inbox at http://localhost:8025. Every notification email lands there; nothing is sent to real addresses.
 
 ## Gateway mode (WSO2 API Manager)
 
@@ -93,6 +96,13 @@ Roles become OAuth2 scopes: employees get `access_request:read` and `access_requ
 
 **Messaging, in short:** submitting or reviewing publishes `AccessRequestSubmitted` / `AccessRequestReviewed` to the topic `access-request.events` *after* the database commit, keyed by request id (so one request's events stay in order). The `notification-service` consumer records each one in `NOTIFICATION_LOG`, skips duplicates, retries failures in place, and moves records that still fail to `access-request.events.DLT`. To demonstrate the failure path, request access to the system **`Legacy Mainframe`** (configured by `NOTIFICATIONS_FAIL_FOR_SYSTEM`). Details: [architecture.md §3](docs/architecture.md#3-submitting-a-request-and-what-happens-afterwards). Optional Kafka UI: `docker compose --profile ui up -d`, then http://localhost:8081.
 
+**Email and live updates:** two independent consumer groups read the same Kafka topic (fan-out).
+
+- `notification-service` writes `NOTIFICATION_LOG` and emails the admins (new request) or the submitter (approved/rejected).
+- A live-update consumer pushes each change over **Server-Sent Events** (`GET /api/events/stream`) to every open browser tab. The request page, the Notifications panel and the request lists refresh themselves, and the header shows **● Live** while connected.
+
+Details: [docs/email-and-live-updates.md](docs/email-and-live-updates.md).
+
 ### Project layout
 
 ```text
@@ -118,18 +128,18 @@ infra/
   init-env.mjs                creates .env with random secrets
   wso2/                       WSO2 deployment.toml + setup.mjs
 docs/                         architecture, concepts, demo script, WSO2 guide, API examples
-docker-compose.yml            oracle, kafka, kafka-ui (profile ui), wso2am (profile gateway)
+docker-compose.yml            oracle, kafka, mailpit, kafka-ui (profile ui), wso2am (profile gateway)
 ```
 
 ## Tests
 
 ```bash
-cd backend  && ./mvnw test                  # 56 JUnit tests: unit, web slice, Oracle + Kafka integration
-cd frontend && npx ng test --watch=false    # 31 Vitest tests: forms, states, roles, PKCE
+cd backend  && ./mvnw test                  # 64 JUnit tests: unit, web slice, Oracle + Kafka + Mailpit integration
+cd frontend && npx ng test --watch=false    # 40 Vitest tests: forms, states, roles, PKCE, live updates
 ```
 
 - Unit and web-slice tests need nothing else.
-- Integration tests start throwaway Oracle and Kafka containers through **Testcontainers** (the first run pulls images and takes a few minutes). If Docker isn't running, they are reported as **skipped**, so check that the summary says `Skipped: 0`. No H2 is used: Oracle-specific SQL is tested on Oracle.
+- Integration tests start throwaway Oracle, Kafka and Mailpit containers through **Testcontainers** (the first run pulls images and takes a few minutes). If Docker isn't running, they are reported as **skipped**, so check that the summary says `Skipped: 0`. No H2 is used: Oracle-specific SQL is tested on Oracle.
 
 ## API
 
@@ -141,6 +151,7 @@ cd frontend && npx ng test --watch=false    # 31 Vitest tests: forms, states, ro
 | PATCH | `/api/requests/{id}/status` | `{"status":"APPROVED"\|"REJECTED","comment":"..."}`: admin only; 409 if no longer PENDING |
 | GET | `/api/requests/{id}/history` | Status history |
 | GET | `/api/requests/{id}/notifications` | Notifications recorded by the Kafka consumer (demo/diagnostics) |
+| GET | `/api/events/stream` | Live updates: a long-lived `text/event-stream` with `request` and `notification` events |
 | GET | `/api/health` | App + database check (public) |
 
 Errors use RFC 9457 problem details: `{"title","status","detail","instance","errors"?}`. Through the gateway the same paths live under `https://localhost:8243/accessportal/1.0.0` (without `/api`).
@@ -159,6 +170,9 @@ Values come from environment variables or the repo-root `.env` file ([.env.examp
 | `DB_POOL_CONNECTION_TIMEOUT_MS` | 30000 | Hikari: max wait for a free connection |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker address(es) |
 | `NOTIFICATIONS_FAIL_FOR_SYSTEM` | empty | Demo switch: notifications for this system name fail → retries → dead-letter topic |
+| `MAIL_HOST` / `MAIL_PORT` | `localhost` / `1025` | SMTP server (Mailpit locally) |
+| `NOTIFICATIONS_ADMIN_ADDRESS` | `it-admins@example.com` | Recipient of "new access request" emails |
+| `NOTIFICATIONS_USER_DOMAIN` | `example.com` | Submitters get mail at `<username>@<domain>` (in gateway mode the username is the WSO2 user id) |
 | `WSO2_ADMIN_PASSWORD` / `WSO2_ENCRYPTION_KEY` | — | WSO2 super-admin password / 32-hex-char key WSO2 encrypts stored secrets with (gateway profile) |
 | `PORTAL_EMPLOYEE_PASSWORD` / `PORTAL_ADMIN_PASSWORD` | — | Passwords of the WSO2 demo users `ted.l` / `alice.admin`, created by `infra/wso2/setup.mjs` |
 | `WSO2_SIGNING_CERT` | `file:../infra/wso2/generated/wso2-signing-cert.pem` | Certificate the backend verifies `X-JWT-Assertion` with (gateway profile) |
@@ -189,4 +203,6 @@ Pool metrics (dev profile): `GET /actuator/metrics/hikaricp.connections.active`.
 | Browser: "Your connection isn't private" on `localhost:9443` | WSO2's self-signed certificate; continue once (local development only) |
 | UI shows "Could not reach the sign-in server" | WSO2 not running/healthy, or `setup.mjs` not run (`frontend/public/gateway-config.json` missing) |
 | After `docker compose rm/down` of WSO2, login fails with an unknown client | WSO2 was recreated: run `node infra/wso2/setup.mjs` again (new client id), then reload the UI |
+| Notifications show **FAILED** with "Connection refused" | Mailpit isn't running: `docker compose up -d mailpit`. Failed events stay in the dead-letter topic; new ones are emailed again at once |
+| No **● Live** badge, pages don't update by themselves | The stream isn't connected: backend not running, or it was restarted. The page reconnects by itself (within ~30 s); reloading the tab reconnects at once |
 | `java -version` shows 1.8 | Open a new terminal after installing JDK 21, or set `JAVA_HOME` to the JDK 21 folder |

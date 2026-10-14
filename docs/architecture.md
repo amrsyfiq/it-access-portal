@@ -21,10 +21,12 @@ flowchart LR
         api[REST API<br/>controller → service → MyBatis mapper]
         pub[Event publisher<br/>after commit]
         con[Notification consumer<br/>@KafkaListener]
+        live[Live-update consumer<br/>own group per instance]
     end
 
     db[(Oracle Database 23ai<br/>via HikariCP pool)]
     kafka[[Apache Kafka 4.2<br/>topic access-request.events<br/>+ .DLT]]
+    mail[(Mailpit<br/>SMTP + web inbox)]
 
     user --> ui
     ui -- "direct mode: /api" --> api
@@ -33,6 +35,9 @@ flowchart LR
     gw -- "X-JWT-Assertion<br/>(signed by WSO2)" --> api
     api --> db
     api --> pub --> kafka --> con --> db
+    con -- email --> mail
+    kafka --> live
+    live -. "SSE /api/events/stream" .-> ui
 ```
 
 | Part | Technology | Responsibility |
@@ -246,4 +251,6 @@ Secrets and environment-specific values come from the git-ignored `.env` (create
 | Oracle | Container, single schema user | Managed DB, least-privilege runtime user (separate from the migration user), backups |
 | Observability | Logs + Actuator (health, metrics) in dev | Structured logs, tracing (Micrometer + OpenTelemetry), dashboards and alerts |
 | Delivery | No CI, local runs only | CI pipeline running unit + integration tests, container images, environment configs |
-| Features | No email, no pagination UI beyond prev/next, no audit export | Real notifications, request expiry and revocation, reporting |
+| Email | At-least-once delivery to Mailpit (local catcher); no SMTP auth or TLS configured | Real SMTP relay with TLS and credentials from a vault; outbox or a provider idempotency key for exactly-once |
+| Live updates | SSE connections held in each instance's memory; events missed while disconnected are not replayed; no per-user filtering | Broadcast layer or sticky sessions at scale; resume with `Last-Event-ID`; filter events by what the user may see |
+| Features | No pagination UI beyond prev/next, no audit export | Request expiry and revocation, reporting |
