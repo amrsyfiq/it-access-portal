@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
 import java.util.List;
@@ -48,8 +47,11 @@ public class AccessRequestController {
     public ResponseEntity<AccessRequestResponse> create(@Valid @RequestBody CreateAccessRequest body,
                                                         CurrentUser user) {
         AccessRequestResponse created = service.create(body, user);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}").buildAndExpand(created.id()).toUri();
+        // Relative reference (RFC 3986): the client resolves it against the URL it called, so it is
+        // right both directly (/api/requests -> /api/requests/42) and through the WSO2 gateway
+        // (/accessportal/1.0.0/requests -> /accessportal/1.0.0/requests/42). An absolute URL built
+        // from this request would leak the internal backend address to gateway clients.
+        URI location = URI.create("requests/" + created.id());
         return ResponseEntity.created(location).body(created);
     }
 

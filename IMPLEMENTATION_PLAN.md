@@ -1,6 +1,6 @@
 # Implementation Plan — IT Access Request Portal
 
-Status: **Phases 1–3 complete (verified against Oracle 23ai, Apache Kafka 4.2 and in a real browser). Next: Phase 4 — WSO2 API Manager.**
+Status: **Phases 1–4 complete (Oracle 23ai, Apache Kafka 4.2, WSO2 API Manager 4.7; verified in a real browser). Next: Phase 5 — quality and documentation.**
 Last updated: 2026-10-13
 
 Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static frontend system catalog, package `com.itaccess.portal`. **2026-10-14: messaging changed from RabbitMQ to Apache Kafka** (team/company standard). This intentionally overrides the brief's "do not replace requested technologies" for this one component; RabbitMQ is no longer part of the project.
@@ -38,6 +38,17 @@ Decisions confirmed by the user: Docker Desktop route, JDK 21 install, static fr
 | 2026-10-14 | Live check vs compose Kafka: request 41's submitted + reviewed events on the same partition (offsets 0, 1); `Legacy Mainframe` → FAILED; Kafka CLI: both topics 3 partitions, consumer-group lag 0, DLT record on the original partition with `kafka_dlt-original-topic` header and matching `eventId`; Kafka UI cluster ONLINE | ✅ |
 | 2026-10-14 | `ng test`: 23 pass; Edge check of the Notifications panel passes, no console errors (an empty list seen mid-Refresh was the loading state, confirmed with a separate check) | ✅ Phase 3 (Kafka) exit criteria met |
 | — | Not verified: replaying a dead-lettered record (re-publish it from the DLT to `access-request.events`). The FAILED → PROCESSED code path for a replay is unit-tested only | ⚠️ open |
+| 2026-10-14 | Phase 3 (Kafka) merged (PR #4); RabbitMQ container, volume and `.env` lines removed | ✅ |
+| 2026-10-14 | Phase 4: WSO2 APIM 4.7.0 in Compose (profile `gateway`), healthy in ~90 s, ~1.4 GB RAM. First start logged "Automatic encryption key generation failed" (it tried to write into the read-only config) → `[encryption] key` from `.env` → clean log | ✅ fixed |
+| 2026-10-14 | User/role management: SCIM `/scim2/Users` 404, `/scim2/v2/*` 401 (user-management scopes not granted) → used the `RemoteUserStoreManagerService` SOAP admin service (basic auth) | ✅ |
+| 2026-10-14 | Inspected the backend JWT with a temporary echo server: RS256, `sub` = user UUID, `scope` present, **no username**, `Authorization` header stripped. Tried: opaque-token app (4.7 ignores `tokenType: OAUTH`), `include_username_in_access_token` (token endpoint HTTP 500 → reverted), SP subject claim via SOAP (`StackOverflowError` in WSO2). Official 4.x docs confirm: JWT tokens → backend JWT built from the token's claims only. **User decision: use the WSO2 user id as the actor; PKCE login for Angular** | ✅ decided |
+| 2026-10-14 | Gateway security matrix (curl): gateway no/invalid token 401; `/health` public 200; ted GET/POST 200/201; ted PATCH 403 (WSO2 scope check); alice PATCH 200; direct backend without JWT, with `X-Demo-*` headers, with `alg:none` or a foreign-key RS256 JWT → 401 | ✅ |
+| 2026-10-14 | Bug: `Location` header leaked the internal backend URL (`http://host.docker.internal:8080/...`) through the gateway → relative `requests/{id}` (RFC 3986), correct both directly and via the gateway | ✅ fixed |
+| 2026-10-14 | Backend tests: 15 new (verifier: valid / expired / skew / foreign key / `alg:none` / HS256-with-public-key / issuer / subject / garbage; gateway-mode MVC slice). Mutation check: skipping the signature check fails 2 tests. Full suite **56 run, 0 failures, 0 skipped** | ✅ |
+| 2026-10-14 | Frontend: auth tests (PKCE vs the RFC 7636 test vector, authorize URL, code exchange without a secret, state mismatch, WSO2 error, scope→role, Bearer only on API calls, logout) → **31 pass**; `ng build` clean in both configurations (a type import broke the gateway build because `fileReplacements` swaps `environment.ts` → moved types to `environment.model.ts`) | ✅ |
+| 2026-10-14 | Browser (Edge) through the real WSO2 login page: ted signs in (consent) → EMPLOYEE, submits; sign-out via WSO2 logout page; alice → ADMIN, approves; notifications via Kafka through the gateway; every API call Bearer, the token call without a secret. Console errors only from WSO2's own login page (`<svg>` attribute) | ✅ |
+| 2026-10-14 | Reproducibility: WSO2 container deleted and recreated, `setup.mjs` once (10 s), the security matrix and browser flow re-run → identical results. Demo mode regression walkthrough passes | ✅ Phase 4 exit criteria met |
+| — | Not verified in Phase 4: refresh tokens, token revocation, multiple gateway nodes; WSO2's "default internal credentials" warning left as-is (local only) | ⚠️ open |
 
 ---
 
@@ -182,13 +193,12 @@ topic access-request.events.DLT    3 partitions; failed record copied to the sam
   - `environment.gateway.ts` → `https://localhost:8243/accessportal/1.0.0` (WSO2), selected with `ng serve --configuration gateway`.
 - Tests: Vitest (Angular 22 default) for form validation, list rendering, error state, and the visibility of the approve/reject controls.
 
-### WSO2 (Phase 4)
-- Import the backend's OpenAPI spec (generated by springdoc) into the APIM Publisher, then deploy it to the gateway with context `/accessportal`, version `1.0.0`.
-- Scopes: `access_request:submit` (POST), `access_request:review` (PATCH status), and read endpoints need any valid token.
-- Create an application in the Developer Portal → subscribe → generate tokens via the client-credentials / password grant (documented with curl).
-- Enable WSO2 **backend JWT** generation. The backend switches from dev headers to reading the user and scopes from the gateway's JWT (Spring Security resource server, verifying against the WSO2 JWKS). Direct-to-backend calls without the JWT are rejected in the `gateway` profile.
-- Verification: a call with a valid token → 200; no token → 401; a token without the review scope on PATCH → 403.
-- Known local quirk: the gateway uses a self-signed cert, so the browser has to trust it once (documented).
+### WSO2 (Phase 4), as built (2026-10-14; details in docs/wso2-setup.md)
+- **Scripted setup** (`infra/wso2/setup.mjs`, idempotent, ~10 s) instead of importing an OpenAPI spec: roles and demo users via the `RemoteUserStoreManagerService` admin service (the SCIM endpoints did not accept the available credentials in 4.7); the API is created with explicit resources and scopes through the Publisher REST API v4, deployed as a revision and published; the Developer Portal application is subscribed and given keys.
+- **Scopes:** `access_request:read` (all GETs), `access_request:submit` (POST) and `access_request:review` (PATCH status), bound to roles `portal_employee` / `portal_admin`; `GET /health` is public.
+- **Backend JWT** (`[apim.jwt]`, base64url, RS256): the backend's `gateway` profile accepts `/api/**` only with a valid `X-JWT-Assertion`, verified with WSO2's exported certificate (nimbus-jose-jwt; RS256 only; issuer, expiry and subject checked). Actor = `sub` (WSO2 user UUID: 4.x does not pass usernames to the backend with JWT access tokens; three workarounds tried and rejected, see wso2-setup.md). Admin = scope `access_request:review`.
+- **Angular:** `npm run start:gateway` swaps the environment; authorization code + PKCE (S256) as a public client (`pkceMandatory`, `bypassClientCredentials`); the token lives in `sessionStorage`; a Bearer interceptor, a sign-in guard and OIDC logout. The dev server proxies `/gateway` and `/oauth2/token` (CORS on WSO2's :9443 could not be enabled via `deployment.toml`).
+- Config: `deployment.toml` mounted read-only; admin password and an `[encryption] key` come from `.env` (4.7 otherwise tries to write a generated key into the read-only file).
 
 ## 5. Phases & exit criteria (summary)
 

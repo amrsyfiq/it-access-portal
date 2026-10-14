@@ -1,7 +1,7 @@
 # End-to-end demo script
 
 A manual walkthrough that proves the workflow end to end. Each step says what to do and what you should see.
-Steps marked *(Phase 4)* need the WSO2 gateway, which is not built yet.
+Step 6 runs the same app through the WSO2 API Manager gateway with a real OAuth2 login.
 
 ## 0. Start everything
 
@@ -103,9 +103,18 @@ A review that fails and rolls back (e.g. the transaction-rollback integration te
 3. **Review queue** (`?status=PENDING`) shows pending requests, or a "No requests found." empty state.
 4. Stop the backend and reload the list. **Expected:** "Cannot reach the server. Check that the backend is running." with a **Try again** button.
 
-## 6. *(Phase 4)* Through the WSO2 gateway
+## 6. Through the WSO2 gateway (OAuth2)
 
-Not built yet.
+Setup and background: [wso2-setup.md](wso2-setup.md). Start WSO2 (`docker compose --profile gateway up -d wso2am`, then `node infra/wso2/setup.mjs`), the backend with `-Dspring-boot.run.profiles=dev,gateway`, and the UI with `npm run start:gateway`.
+
+1. Open http://localhost:4200/requests. **Expected:** you are redirected to WSO2's login page on `https://localhost:9443` (accept the self-signed certificate once).
+2. Sign in as `ted.l` (password `PORTAL_EMPLOYEE_PASSWORD` from `.env`), and choose *Allow* on the consent page. **Expected:** back in the app, the header shows **Signed in via WSO2 · EMPLOYEE**, and there is no *Review queue*.
+3. Submit a request (step 1). Open the browser dev tools → *Network*: calls go to `/gateway/accessportal/1.0.0/...` with `Authorization: Bearer …`. The earlier `/oauth2/token` call has **no** client secret (public client + PKCE).
+4. **Sign out** → confirm on WSO2's logout page → sign in as `alice.admin`. **Expected:** **ADMIN**, the review panel is shown; approve. The history's *by* shows WSO2 user ids (see wso2-setup.md: WSO2 4.x does not pass usernames to the backend).
+5. **Security checks from the command line** (token commands in wso2-setup.md):
+   - gateway without a token → `401`;
+   - `ted.l`'s token on `PATCH …/status` → `403` from WSO2 (token lacks `access_request:review`);
+   - Spring Boot directly (`curl localhost:8080/api/requests`) → `401 Missing X-JWT-Assertion`, also with `X-Demo-*` headers or a forged JWT.
 
 ---
 

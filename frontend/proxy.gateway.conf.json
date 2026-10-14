@@ -1,0 +1,15 @@
+{
+  "/gateway": {
+    "target": "https://localhost:8243",
+    "secure": false,
+    "changeOrigin": true,
+    "pathRewrite": { "^/gateway": "" },
+    "logLevel": "info"
+  },
+  "/oauth2/token": {
+    "target": "https://localhost:9443",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "info"
+  }
+}

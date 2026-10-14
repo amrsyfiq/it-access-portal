@@ -73,5 +73,30 @@ services:
       kafka:
         condition: service_healthy
 
+  wso2am:
+    # WSO2 API Manager: API gateway + publisher + developer portal + OAuth2 key manager in one server.
+    # Heavy (~2-3 GB RAM, ~2 min to start): only with  docker compose --profile gateway up -d
+    image: wso2/wso2am:4.7.0
+    container_name: portal-wso2am
+    profiles: ["gateway"]
+    ports:
+      - "9443:9443"   # management console, Publisher, Developer Portal, OAuth2 token endpoint
+      - "8243:8243"   # API gateway (HTTPS): https://localhost:8243/accessportal/1.0.0/...
+      - "8280:8280"   # API gateway (HTTP)
+    environment:
+      WSO2_ADMIN_PASSWORD: ${WSO2_ADMIN_PASSWORD:?set WSO2_ADMIN_PASSWORD in .env}
+      WSO2_ENCRYPTION_KEY: ${WSO2_ENCRYPTION_KEY:?set WSO2_ENCRYPTION_KEY in .env (32 hex characters)}
+    volumes:
+      - ./infra/wso2/deployment.toml:/home/wso2carbon/wso2am-4.7.0/repository/conf/deployment.toml:ro
+    extra_hosts:
+      # Lets the gateway reach the Spring Boot backend running on your machine (not in Docker).
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -skf https://localhost:9443/services/Version > /dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+
 volumes:
   oracle-data:

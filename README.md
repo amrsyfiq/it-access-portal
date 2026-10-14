@@ -2,16 +2,16 @@
 
 Employees request access to internal systems (GitLab, Jira, AWS, ...). Administrators approve or reject the requests, and every status change is recorded in a history table.
 
-Learning and portfolio project. Stack: Spring Boot 4.1 · MyBatis 3 · HikariCP · Oracle Database Free 23ai · Flyway · Apache Kafka · Angular 22 · WSO2 API Manager *(Phase 4)*.
+Learning and portfolio project. Stack: Spring Boot 4.1 · MyBatis 3 · HikariCP · Oracle Database Free 23ai · Flyway · Apache Kafka · Angular 22 · WSO2 API Manager 4.7.
 
-> Status: **backend (Phase 1), Angular UI (Phase 2) and Kafka messaging (Phase 3) working and tested against Oracle and Kafka.** The WSO2 gateway (Phase 4) is not built yet. See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) and the [demo script](docs/demo-script.md).
+> Status: **Phases 1–4 working and tested:** backend (Oracle, MyBatis), Angular UI, Kafka messaging, and the WSO2 API Manager gateway with OAuth2 (PKCE login). See [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md), the [demo script](docs/demo-script.md) and the [WSO2 guide](docs/wso2-setup.md).
 
 ## Prerequisites
 
 | Tool | Version | Notes |
 |---|---|---|
 | JDK | 21 | `java -version` must show 21. Maven is **not** needed: use the `mvnw` wrapper |
-| Docker Desktop | recent | WSL2 backend; runs Oracle, Kafka (and later WSO2) |
+| Docker Desktop | recent | WSL2 backend; runs Oracle, Kafka and (optionally) WSO2 API Manager; give it ≥ 8 GB RAM |
 | Node.js | 22.22+ | Phase 2 |
 
 ## Run locally
@@ -90,6 +90,20 @@ AccessRequestService (DB transaction)
 **Local broker:** single node, KRaft mode (no ZooKeeper), plaintext without authentication: fine for a laptop, not for production (which would use SASL/TLS and replication factor ≥ 3). It has no volume, so records survive `docker compose stop`/`start` but not `down`.
 
 Kafka UI (optional): `docker compose --profile ui up -d`, then http://localhost:8081. Walkthrough: [demo script, step 3](docs/demo-script.md#3-event-published-consumed-and-logged-kafka).
+## API gateway (WSO2 API Manager)
+
+The same API is published through **WSO2 API Manager 4.7.0**, which validates OAuth2 tokens and checks scopes per resource before forwarding to Spring Boot. Full guide: **[docs/wso2-setup.md](docs/wso2-setup.md)**.
+
+| | Direct mode (default) | Gateway mode |
+|---|---|---|
+| Start | `npm start` + `./mvnw spring-boot:run` | `npm run start:gateway` + `./mvnw spring-boot:run -Dspring-boot.run.profiles=dev,gateway` |
+| UI calls | `/api` → Spring Boot :8080 | `/gateway/accessportal/1.0.0` → WSO2 :8243 → Spring Boot |
+| Who you are | Demo-user switcher (`X-Demo-*` headers, **not security**) | Sign-in on WSO2's login page (authorization code + PKCE) |
+| Backend trusts | the headers | only a WSO2-signed `X-JWT-Assertion` (401 otherwise, also for direct calls) |
+| Needs | Oracle, Kafka | + `docker compose --profile gateway up -d wso2am` and `node infra/wso2/setup.mjs` |
+
+Roles become OAuth2 scopes: employees get `access_request:read` + `access_request:submit`, admins also get `access_request:review` (approve/reject). A missing scope is rejected by the gateway (403) before the backend is reached.
+
 ## Tests
 
 ```bash
@@ -114,7 +128,7 @@ cd frontend && npx ng test --watch=false   # Vitest: components against a mocked
 
 Errors use RFC 9457 problem details: `{"title","status","detail","instance","errors"?}`.
 
-**Roles (development only):** send `X-Demo-User: <name>` and `X-Demo-Role: ADMIN|EMPLOYEE`. These headers are **not security**; anyone can set them. Phase 4 replaces them with OAuth2 tokens validated by the WSO2 gateway.
+**Roles (direct mode, development only):** send `X-Demo-User: <name>` and `X-Demo-Role: ADMIN|EMPLOYEE`. These headers are **not security**; anyone can set them. In gateway mode they are ignored and identity comes from WSO2 (see *API gateway* above).
 
 ## Configuration
 
@@ -129,6 +143,9 @@ Values come from environment variables or the repo-root `.env` file (see [.env.e
 | `DB_POOL_CONNECTION_TIMEOUT_MS` | 30000 | Hikari: max wait for a free connection |
 | `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` | Kafka broker address(es) |
 | `NOTIFICATIONS_FAIL_FOR_SYSTEM` | empty | Demo switch: notifications for this system name fail → retries → dead-letter topic |
+| `WSO2_ADMIN_PASSWORD` / `WSO2_ENCRYPTION_KEY` | — | WSO2 super-admin password / 32-hex-char key WSO2 encrypts stored secrets with (gateway profile) |
+| `PORTAL_EMPLOYEE_PASSWORD` / `PORTAL_ADMIN_PASSWORD` | — | Passwords of the WSO2 demo users `ted.l` / `alice.admin`, created by `infra/wso2/setup.mjs` |
+| `WSO2_SIGNING_CERT` | `file:../infra/wso2/generated/wso2-signing-cert.pem` | Certificate the backend verifies `X-JWT-Assertion` with (gateway profile) |
 
 Pool metrics (dev profile): `GET /actuator/metrics/hikaricp.connections.active`.
 
@@ -149,4 +166,11 @@ Pool metrics (dev profile): `GET /actuator/metrics/hikaricp.connections.active`.
 | Records in `access-request.events.DLT` | Expected for failed notifications. Inspect them in Kafka UI (*Topics → access-request.events.DLT → Messages*, headers show the exception) or with `kafka-console-consumer.sh` (see demo script) |
 | Consumer seems idle for a few seconds after startup | The consumer group is joining (partition assignment). Normal; records produced meanwhile are read once it has joined |
 | `UnknownTopicOrPartitionException` | Topics are created by the app at startup (auto-create is off in Compose). Start the backend once before producing by hand |
+| Gateway mode: backend fails to start with "WSO2 signing certificate not found" | Run `node infra/wso2/setup.mjs` (it exports the certificate) with WSO2 running |
+| Gateway mode: every API call returns 401 `Missing X-JWT-Assertion` | You are calling Spring Boot directly; in gateway mode go through `https://localhost:8243/accessportal/1.0.0` (or the UI's `/gateway` proxy) |
+| Gateway mode: 401 from the gateway after an hour | The access token expired (no refresh-token handling); the UI sends you to sign in again |
+| Gateway mode: 403 `900910` "access token does not allow you to access the requested resource" | The user's role lacks the scope (e.g. employee approving). Expected |
+| Browser: "Your connection isn't private" on `localhost:9443` | WSO2's self-signed certificate; continue once (local development only) |
+| UI shows "Could not reach the sign-in server" | WSO2 not running/healthy, or `setup.mjs` not run (`frontend/public/gateway-config.json` missing) |
+| After `docker compose rm/down` of WSO2, login fails with an unknown client | WSO2 was recreated: run `node infra/wso2/setup.mjs` again (new client id), then reload the UI |
 | `java -version` shows 1.8 | Open a new terminal after installing JDK 21, or set `JAVA_HOME` to the JDK 21 folder |

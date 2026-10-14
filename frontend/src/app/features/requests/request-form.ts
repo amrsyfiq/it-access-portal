@@ -3,7 +3,7 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AccessRequestApi } from '../../core/access-request-api';
 import { ApiError, toApiError } from '../../core/api-error';
-import { DemoUserService } from '../../core/demo-user';
+import { SessionService } from '../../core/session';
 import { ACCESS_LEVELS, AccessLevel } from '../../core/models';
 
 type FieldName = 'requesterName' | 'systemName' | 'accessLevel' | 'reason';
@@ -26,7 +26,7 @@ export class RequestForm {
 
   // Same limits as the backend's Bean Validation annotations on CreateAccessRequest.
   protected readonly form = this.fb.group({
-    requesterName: [inject(DemoUserService).current().displayName, [Validators.required, Validators.maxLength(100)]],
+    requesterName: [inject(SessionService).displayName(), [Validators.required, Validators.maxLength(100)]],
     systemName: [
       this.route.snapshot.queryParamMap.get('system') ?? '',
       [Validators.required, Validators.maxLength(100)],

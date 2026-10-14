@@ -12,3 +12,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# WSO2 setup output (client secret, exported certificate)
+infra/wso2/generated/
+# Written by infra/wso2/setup.mjs (OAuth client id for gateway mode)
+frontend/public/gateway-config.json

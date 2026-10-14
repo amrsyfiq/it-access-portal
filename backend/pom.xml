@@ -60,6 +60,14 @@
 			<artifactId>spring-boot-starter-kafka</artifactId>
 		</dependency>
 
+		<!-- Verifies the RS256-signed JWT (X-JWT-Assertion) that the WSO2 gateway adds to each request.
+		     Not managed by Spring Boot (normally pulled in by Spring Security), so the version is pinned. -->
+		<dependency>
+			<groupId>com.nimbusds</groupId>
+			<artifactId>nimbus-jose-jwt</artifactId>
+			<version>10.10</version>
+		</dependency>
+
 		<!-- Tests -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

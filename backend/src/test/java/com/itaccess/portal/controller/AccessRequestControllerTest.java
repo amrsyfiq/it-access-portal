@@ -66,7 +66,7 @@ class AccessRequestControllerTest {
                                 {"requesterName":"Ted L","systemName":"Jira","accessLevel":"READ",
                                  "reason":"Need to view tickets"}"""))
                 .andExpect(status().isCreated())
-                .andExpect(header().string("Location", "http://localhost/api/requests/5"))
+                .andExpect(header().string("Location", "requests/5"))
                 .andExpect(jsonPath("$.id").value(5))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.createdAt").value("2026-10-13T08:00:00Z"));

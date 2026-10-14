@@ -9,7 +9,7 @@
         [routerLinkActiveOptions]="{ paths: 'exact', queryParams: 'ignored', matrixParams: 'ignored', fragment: 'ignored' }"
         >All requests</a
       >
-      @if (demoUser.isAdmin()) {
+      @if (session.isAdmin()) {
         <a routerLink="/requests" [queryParams]="{ status: 'PENDING' }">Review queue</a>
       }
     </nav>
@@ -18,18 +18,25 @@
 
   <div class="main">
     <header class="topbar">
-      <label class="user-switch">
-        <span class="user-switch-label">Demo user <small>(dev only)</small></span>
-        <!-- [selected] per option, not [value] on the select: the options are rendered by @for
-             after the select's value would be applied, so a restored user would not be shown. -->
-        <select (change)="onUserChange($event)">
-          @for (u of users; track u.username) {
-            <option [value]="u.username" [selected]="u.username === demoUser.current().username">
-              {{ u.displayName }} · {{ u.role }}
-            </option>
-          }
-        </select>
-      </label>
+      @if (session.mode === 'demo') {
+        <label class="user-switch">
+          <span class="user-switch-label">Demo user <small>(dev only)</small></span>
+          <!-- [selected] per option, not [value] on the select: the options are rendered by @for
+               after the select's value would be applied, so a restored user would not be shown. -->
+          <select (change)="onUserChange($event)">
+            @for (u of users; track u.username) {
+              <option [value]="u.username" [selected]="u.username === demoUser.current().username">
+                {{ u.displayName }} · {{ u.role }}
+              </option>
+            }
+          </select>
+        </label>
+      } @else if (auth.isAuthenticated()) {
+        <div class="user-switch">
+          <span>Signed in via WSO2 · <strong>{{ session.roleLabel() }}</strong></span>
+          <button class="btn" type="button" (click)="signOut()">Sign out</button>
+        </div>
+      }
     </header>
 
     <main class="content">
