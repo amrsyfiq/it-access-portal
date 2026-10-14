@@ -73,6 +73,7 @@ mybatis:
 portal:
   auth:
     # demo-headers: X-Demo-User / X-Demo-Role headers (development only, see DemoHeaderUserResolver)
+    # gateway-jwt:  signed X-JWT-Assertion from the WSO2 gateway (profile "gateway", see GatewaySecurityConfig)
     mode: demo-headers
   notifications:
     # Demo switch: notifications for this system name fail, to show retries + the dead-letter queue.
@@ -111,3 +112,21 @@ logging:
     # Logs every SQL statement and its bound parameters (MyBatis logs per mapper namespace).
     com.itaccess.portal.mapper: DEBUG
     com.zaxxer.hikari: INFO
+
+---
+# Behind the WSO2 gateway: run with  --spring.profiles.active=dev,gateway
+# Every /api/** call (except /api/health) must carry the gateway's signed X-JWT-Assertion.
+spring:
+  config:
+    activate:
+      on-profile: gateway
+
+portal:
+  auth:
+    mode: gateway-jwt
+  gateway:
+    jwt:
+      # Public certificate of WSO2's signing key, exported by: node infra/wso2/setup.mjs
+      certificate: ${WSO2_SIGNING_CERT:file:../infra/wso2/generated/wso2-signing-cert.pem}
+      # "iss" claim of the backend JWT (WSO2 default)
+      issuer: wso2.org/products/am

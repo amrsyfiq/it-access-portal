@@ -74,3 +74,34 @@ GET {{baseUrl}}/api/requests/1/notifications
 
 ### Hikari pool metrics (dev profile only)
 GET {{baseUrl}}/actuator/metrics/hikaricp.connections.active
+
+### =====================================================================
+### Through the WSO2 gateway (gateway mode, see docs/wso2-setup.md)
+### Paste a token from:  curl ... /oauth2/token  (docs/wso2-setup.md, "Get a token")
+### =====================================================================
+
+@gateway = https://localhost:8243/accessportal/1.0.0
+@token = paste-access-token-here
+
+### Public resource: no token needed
+GET {{gateway}}/health
+
+### No token -> 401 from WSO2
+GET {{gateway}}/requests
+
+### With a token
+GET {{gateway}}/requests?status=PENDING
+Authorization: Bearer {{token}}
+
+### Approve: needs access_request:review (alice.admin); ted.l's token -> 403 from WSO2
+PATCH {{gateway}}/requests/1/status
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "APPROVED",
+  "comment": "Approved through the gateway"
+}
+
+### Backend directly in gateway mode, no X-JWT-Assertion -> 401 from Spring Boot
+GET {{baseUrl}}/api/requests

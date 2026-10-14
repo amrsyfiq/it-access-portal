@@ -1,5 +1,6 @@
 package com.itaccess.portal.exception;
 
+import com.itaccess.portal.security.InvalidGatewayTokenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +38,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(InvalidStatusTransitionException.class)
     ProblemDetail handleInvalidTransition(InvalidStatusTransitionException ex) {
         return problem(HttpStatus.CONFLICT, "Invalid status transition", ex.getMessage());
+    }
+
+    @ExceptionHandler(InvalidGatewayTokenException.class)
+    ProblemDetail handleInvalidGatewayToken(InvalidGatewayTokenException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
     }
 
     @ExceptionHandler(ForbiddenOperationException.class)

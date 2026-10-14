@@ -5,7 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, catchError, combineLatest, map, of, startWith, switchMap } from 'rxjs';
 import { AccessRequestApi } from '../../core/access-request-api';
 import { ApiError, toApiError } from '../../core/api-error';
-import { DemoUserService } from '../../core/demo-user';
+import { SessionService } from '../../core/session';
 import { AccessRequestDetail } from '../../core/models';
 import { StatusBadge } from '../../shared/status-badge';
 import { NotificationsPanel } from './notifications-panel';
@@ -25,7 +25,7 @@ type DetailState =
 export class RequestDetail {
   private readonly api = inject(AccessRequestApi);
   private readonly route = inject(ActivatedRoute);
-  private readonly demoUser = inject(DemoUserService);
+  private readonly session = inject(SessionService);
 
   protected readonly state = signal<DetailState>({ kind: 'loading' });
   /** One-off success message, e.g. passed by the form via router state after creating the request. */
@@ -36,7 +36,7 @@ export class RequestDetail {
   /** Approve/reject are only offered to admins, and only while the request is still PENDING. */
   protected readonly canReview = computed(() => {
     const s = this.state();
-    return this.demoUser.isAdmin() && s.kind === 'loaded' && s.request.status === 'PENDING';
+    return this.session.isAdmin() && s.kind === 'loaded' && s.request.status === 'PENDING';
   });
 
   private readonly reload$ = new Subject<void>();
